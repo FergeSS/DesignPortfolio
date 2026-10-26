@@ -46,13 +46,13 @@ function fixture() {
 async function setup(t) {
   const root = await mkdtemp(resolve(tmpdir(), 'portfolio-test-'));
   t.after(() => rm(root, { recursive: true, force: true }));
-  await writeFile(resolve(root, 'portfolio.config.json'), JSON.stringify({ title: 'Портфолио', description: 'Описание', sourcePath: '/', ignoredFolders: ['Черновики'], maxFileBytes: 1024 * 1024 }));
+  await writeFile(resolve(root, 'portfolio.config.json'), JSON.stringify({ title: 'Портфолио', description: 'Описание', publicUrl: 'https://disk.yandex.ru/d/test', sourcePath: '/', ignoredFolders: ['Черновики'] }));
   await mkdir(resolve(root, 'src'));
   await writeFile(resolve(root, 'src/style.css'), 'body{}');
   return root;
 }
 
-test('end-to-end: Unicode paths, paginated API, download integrity, hidden drafts, generated pages and offline rebuild', async (t) => {
+test('end-to-end: paginated catalog, Unicode paths and static pages without downloading media', async (t) => {
   const root = await setup(t);
   const f = fixture();
   const data = await syncPortfolio({ root, disk: f.disk });
@@ -70,15 +70,24 @@ test('end-to-end: Unicode paths, paginated API, download integrity, hidden draft
   assert.ok(!home.includes('<script>alert(1)</script>'));
   const project = await readFile(resolve(root, 'dist/projects/ezh/index.html'), 'utf8');
   assert.ok(project.includes('Первый абзац.</p><p>Второй абзац.'));
-  assert.ok(project.includes('../../assets/'));
-  for (const image of data.projects[0].images) assert.deepEqual(await readFile(resolve(root, 'dist', image.src)), png);
-  const count = f.requests.filter((u) => u.hostname === 'files.example' && u.searchParams.get('path')?.endsWith('.png')).length;
+  assert.ok(project.includes('data-disk-path="/Кофейня/02.png"'));
+  assert.ok(home.includes('data-disk-mode="preview"'));
+  assert.ok(home.includes('referrerpolicy="no-referrer"'), 'Yandex media rejects a foreign Referer header');
+  assert.ok(project.includes('data-disk-mode="full"'));
+  assert.ok(!project.includes('src="../../assets/'));
+  assert.ok(data.projects[0].images.every((image) => !image.src));
+  await assert.rejects(access(resolve(root, 'dist/assets')));
+  await assert.rejects(access(resolve(root, '.cache/assets')));
   await syncPortfolio({ root, disk: f.disk });
-  assert.equal(f.requests.filter((u) => u.hostname === 'files.example' && u.searchParams.get('path')?.endsWith('.png')).length, count, 'unchanged images are cached');
+  assert.equal(f.requests.filter((u) => u.hostname === 'files.example' && u.searchParams.get('path')?.endsWith('.png')).length, 0, 'only descriptions are downloaded during sync');
+  // Even very large originals remain on Disk and do not make the Pages build large.
+  f.dirs['/Кофейня'][1].size = 5 * 1024 ** 3;
+  await syncPortfolio({ root, disk: f.disk });
   await buildPortfolio(root);
+  assert.ok((await readFile(resolve(root, 'dist/portfolio.json'))).length < 10000);
 });
 
-test('bad UTF-8, API failure, duplicate slugs and corrupt downloads preserve previous snapshot and site', async (t) => {
+test('bad UTF-8, API failure, duplicate slugs and old media snapshots preserve the previous site', async (t) => {
   const root = await setup(t);
   const first = fixture();
   await syncPortfolio({ root, disk: first.disk });
@@ -92,15 +101,10 @@ test('bad UTF-8, API failure, duplicate slugs and corrupt downloads preserve pre
   const duplicate = fixture();
   duplicate.files.set('/Скрыто/info.txt', Buffer.from('Адрес: ezh'));
   await assert.rejects(syncPortfolio({ root, disk: duplicate.disk }), /повторяется/);
-  const corrupt = fixture();
-  corrupt.dirs['/Кофейня'][1].md5 = 'bad';
-  await assert.rejects(syncPortfolio({ root, disk: corrupt.disk }), /контрольная сумма/);
   assert.equal(await readFile(resolve(root, '.cache/portfolio.json'), 'utf8'), snapshot);
   assert.equal(await readFile(resolve(root, 'dist/index.html'), 'utf8'), home);
-  // A missing cached image must not replace an already generated site either.
-  const original = JSON.parse(snapshot);
-  await rm(resolve(root, '.cache', original.projects[0].images[0].src));
-  await assert.rejects(buildPortfolio(root), /ENOENT/);
+  await writeFile(resolve(root, '.cache/portfolio.json'), JSON.stringify({ ...JSON.parse(snapshot), schemaVersion: 1 }));
+  await assert.rejects(buildPortfolio(root), /npm run sync/);
   assert.equal(await readFile(resolve(root, 'dist/index.html'), 'utf8'), home);
 });
 

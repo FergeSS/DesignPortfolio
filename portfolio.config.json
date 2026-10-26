@@ -1,8 +1,8 @@
 {
   "title": "Дизайн-портфолио",
-  "description": "Проекты и визуальные исследования.",
+  "brand": "FERGES",
+  "description": "Идеи, которые становятся визуалом. Дизайн, у которого есть характер.",
   "publicUrl": "https://disk.yandex.ru/d/Mof2CXO0xoRqzA",
   "sourcePath": "/",
-  "ignoredFolders": ["Черновики", "Drafts"],
-  "maxFileBytes": 104857600
+  "ignoredFolders": ["Черновики", "Drafts"]
 }

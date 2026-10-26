@@ -1,13 +1,13 @@
 import { mkdir, readFile, writeFile, rename } from 'node:fs/promises';
-import { createHash } from 'node:crypto';
-import { resolve, dirname, extname } from 'node:path';
+import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { YandexDisk } from './yandex.mjs';
-import { decodeInfo, parseInfo, defaultSlug, hash, imagePattern, natural } from './content.mjs';
+import { decodeInfo, parseInfo, defaultSlug, imagePattern, natural } from './content.mjs';
 
 export async function syncPortfolio({ root = process.cwd(), disk, now = new Date() } = {}) {
   const config = JSON.parse(await readFile(resolve(root, 'portfolio.config.json'), 'utf8'));
-  disk ??= new YandexDisk(process.env.YANDEX_DISK_PUBLIC_URL || config.publicUrl);
+  const publicUrl = process.env.YANDEX_DISK_PUBLIC_URL || config.publicUrl;
+  disk ??= new YandexDisk(publicUrl);
   const cache = resolve(root, '.cache');
   const warnings = [];
   const projects = [];
@@ -31,22 +31,12 @@ export async function syncPortfolio({ root = process.cwd(), disk, now = new Date
     if (!info) warnings.push(`${folder.name}: нет info.txt, используется название папки.`);
     const images = [];
     const imageFiles = files.filter((item) => imagePattern.test(item.name)).sort((a, b) => natural(a.name, b.name));
-    for (const file of imageFiles) {
-      if (file.size > config.maxFileBytes) throw new Error(`${file.path}: изображение больше ${config.maxFileBytes} байт.`);
-      const asset = `assets/${hash(`${file.path}:${file.md5 || file.modified || now.toISOString()}`).slice(0, 32)}${extname(file.name).toLowerCase()}`;
-      const local = resolve(cache, asset);
-      let bytes;
-      try { bytes = await readFile(local); } catch (error) { if (error.code !== 'ENOENT') throw error; }
-      const valid = (value) => value && (!Number.isFinite(file.size) || value.length === file.size) && (!file.md5 || createHash('md5').update(value).digest('hex') === file.md5);
-      if (!valid(bytes)) {
-        bytes = await disk.download(file.path, config.maxFileBytes);
-        if (!valid(bytes)) throw new Error(`${file.path}: размер или контрольная сумма скачанного файла не совпадает.`);
-        await mkdir(dirname(local), { recursive: true });
-        await writeFile(`${local}.tmp`, bytes);
-        await rename(`${local}.tmp`, local);
-      }
-      images.push({ name: file.name, src: asset });
-    }
+    for (const file of imageFiles) images.push({
+      name: file.name,
+      path: file.path,
+      revision: String(file.md5 || file.revision || file.modified || ''),
+      size: file.size,
+    });
     const covers = images.filter((image) => /^cover\./i.test(image.name));
     if (covers.length > 1) throw new Error(`${folder.name}: оставьте только один файл cover.`);
     if (!images.length) warnings.push(`${folder.name}: пока нет изображений.`);
@@ -54,7 +44,7 @@ export async function syncPortfolio({ root = process.cwd(), disk, now = new Date
     projects.push({ ...metadata, slug, folder: folder.name, images, cover: covers[0] || images[0] || null, hasInfo: Boolean(info) });
   }
   projects.sort((a, b) => a.order - b.order || natural(a.title, b.title));
-  const snapshot = { syncedAt: now.toISOString(), sourceName: source.name, projects, warnings };
+  const snapshot = { schemaVersion: 2, storage: 'yandex-direct', publicUrl, syncedAt: now.toISOString(), sourceName: source.name, projects, warnings };
   await mkdir(cache, { recursive: true });
   await writeFile(resolve(cache, 'portfolio.json.tmp'), JSON.stringify(snapshot, null, 2));
   await rename(resolve(cache, 'portfolio.json.tmp'), resolve(cache, 'portfolio.json'));

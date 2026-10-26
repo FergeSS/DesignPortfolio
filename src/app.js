@@ -1,8 +1,7 @@
 const filters = document.querySelectorAll('[data-filter]');
 const scriptUrl = document.currentScript?.src;
 const currentVersion = document.querySelector('meta[name="portfolio-version"]')?.content;
-// This tiny request goes to the site, not to Yandex Disk. The Disk itself is
-// checked once a day by the local server or the GitHub Actions workflow.
+// Check the published catalog version. Media itself loads directly from Disk.
 if (scriptUrl && currentVersion) {
   const siteRoot = new URL('./', scriptUrl);
   let checking = false;
@@ -38,20 +37,4 @@ for (const button of filters) {
     for (const card of cards) card.hidden = Boolean(button.dataset.filter && card.dataset.category !== button.dataset.filter);
     document.querySelector('.empty-filter').hidden = [...cards].some((card) => !card.hidden);
   });
-}
-
-const viewer = document.querySelector('#lightbox');
-if (viewer) {
-  const image = viewer.querySelector('img');
-  for (const button of document.querySelectorAll('[data-full-image]')) {
-    button.addEventListener('click', () => {
-      image.src = button.dataset.fullImage;
-      image.alt = button.querySelector('img').alt;
-      viewer.showModal();
-      document.body.style.overflow = 'hidden';
-    });
-  }
-  viewer.querySelector('button').addEventListener('click', () => viewer.close());
-  viewer.addEventListener('click', (event) => { if (event.target === viewer) viewer.close(); });
-  viewer.addEventListener('close', () => { document.body.style.overflow = ''; image.removeAttribute('src'); });
 }
