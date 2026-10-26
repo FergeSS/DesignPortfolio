@@ -8,7 +8,7 @@ test('open pages detect new builds from the website and recover from network err
   const requests = [];
   const redirects = [];
   const ticks = [];
-  let reloads = 0;
+  const navigations = [];
   let version = 'original';
   let projects = ['ezh'];
   let offline = false;
@@ -22,7 +22,7 @@ test('open pages detect new builds from the website and recover from network err
   };
   runInNewContext(source, {
     document, URL, AbortSignal,
-    location: { pathname: '/DesignPortfolio/projects/ezh/', reload: () => { reloads++; }, assign: (url) => redirects.push(url) },
+    location: { pathname: '/DesignPortfolio/projects/ezh/', href: 'https://portfolio.example/DesignPortfolio/projects/ezh/', replace: (url) => { navigations.push(url); if (new URL(url).pathname === '/DesignPortfolio/') redirects.push(url); } },
     setInterval: (callback, delay) => ticks.push({ callback, delay }),
     fetch: async (url) => {
       requests.push(new URL(url));
@@ -32,7 +32,7 @@ test('open pages detect new builds from the website and recover from network err
   });
   assert.equal(ticks.length, 1);
   await ticks[0].callback();
-  assert.equal(reloads, 0);
+  assert.equal(navigations.length, 0);
   version = 'new-content';
   viewer.open = true;
   await ticks[0].callback();
@@ -40,12 +40,13 @@ test('open pages detect new builds from the website and recover from network err
   viewer.open = false;
   offline = true;
   await ticks[0].callback();
-  assert.equal(reloads, 0);
+  assert.equal(navigations.length, 0);
   offline = false;
   await ticks[0].callback();
-  assert.equal(reloads, 1);
+  assert.equal(navigations.length, 1);
+  assert.equal(navigations[0], 'https://portfolio.example/DesignPortfolio/projects/ezh/?v=new-content');
   projects = [];
   await ticks[0].callback();
-  assert.deepEqual(redirects, ['https://portfolio.example/DesignPortfolio/']);
+  assert.deepEqual(redirects, ['https://portfolio.example/DesignPortfolio/?v=new-content']);
   assert.ok(requests.every((url) => url.origin === 'https://portfolio.example' && url.pathname === '/DesignPortfolio/site-version.json'));
 });

@@ -17,8 +17,9 @@ if (scriptUrl && currentVersion) {
       if (!data.version || data.version === currentVersion) return;
       const path = location.pathname.slice(siteRoot.pathname.length);
       const slug = /^projects\/([^/]+)\//.exec(path)?.[1];
-      if (slug && !data.projects?.includes(slug)) location.assign(siteRoot.href);
-      else location.reload();
+      const target = new URL(slug && !data.projects?.includes(slug) ? siteRoot.href : location.href);
+      target.searchParams.set('v', data.version.slice(0, 12));
+      location.replace(target.href);
     } catch {
       // A temporary network failure must leave the current page usable.
     } finally { checking = false; }

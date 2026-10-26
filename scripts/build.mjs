@@ -18,6 +18,8 @@ async function siteVersion(root, config, snapshot) {
   return hash(JSON.stringify({ config, content, sources, renderer: hash(await readFile(new URL(import.meta.url))) }));
 }
 
+const pageVersion = (config) => config.version ? `?v=${encodeURIComponent(config.version.slice(0, 12))}` : '';
+
 function brandMarkup(config, hero = false) {
   const [first, ...rest] = (config.brand || 'Ferg Design').trim().split(/\s+/);
   if (hero) return `<span>${e(first)}</span>${rest.length ? ` <span class="gradient-text">${e(rest.join(' '))}</span>` : ''}`;
@@ -39,10 +41,10 @@ function layout(config, { title, content, base = './', page = 'home' }) {
 </head><body id="top" data-page="${page}">
 <div class="scroll-progress" aria-hidden="true"></div>
 <a class="skip-link" href="#main">К содержимому</a>
-<header class="header"><a class="brand" href="${base}" aria-label="${e(config.brand || 'Ferg Design')} — главная">${brandMarkup(config)}</a><nav aria-label="Основная навигация"><a class="nav-link" href="${base}#works">Работы <span aria-hidden="true">↗</span></a></nav></header>
+<header class="header"><a class="brand" href="${base}${pageVersion(config)}" aria-label="${e(config.brand || 'Ferg Design')} — главная">${brandMarkup(config)}</a><nav aria-label="Основная навигация"><a class="nav-link" href="${base}${pageVersion(config)}#works">Работы <span aria-hidden="true">↗</span></a></nav></header>
 <main id="main">${content}</main>
 <noscript><p>Для загрузки изображений нужен JavaScript. <a href="${e(config.publicUrl)}">Посмотреть работы на Яндекс Диске</a></p></noscript>
-<footer><a class="footer-brand" href="${base}#top">${brandMarkup(config)}</a><a class="footer-top" href="#top">Наверх <span aria-hidden="true">↑</span></a></footer>
+<footer><a class="footer-brand" href="${base}${pageVersion(config)}#top">${brandMarkup(config)}</a><a class="footer-top" href="#top">Наверх <span aria-hidden="true">↑</span></a></footer>
 <dialog id="lightbox" aria-label="Просмотр изображения"><button class="close-viewer" aria-label="Закрыть изображение"><span>Закрыть</span> ×</button><p class="viewer-status" role="status" hidden></p><a class="viewer-source" target="_blank" rel="noopener noreferrer" hidden>Открыть папку на Диске ↗</a><img alt="" referrerpolicy="no-referrer"></dialog>
 </body></html>`;
 }
@@ -55,25 +57,25 @@ function remoteImage(image, title, { cover = false } = {}) {
 export function renderHome(config, snapshot) {
   const categories = [...new Set(snapshot.projects.map((p) => p.category).filter(Boolean))];
   const filters = categories.length ? `<div class="filters" role="group" aria-label="Категория работ"><button class="filter active" data-filter="" aria-pressed="true">Все работы</button>${categories.map((category) => `<button class="filter" data-filter="${e(category)}" aria-pressed="false">${e(category)}</button>`).join('')}</div>` : '';
-  const cards = snapshot.projects.map((project, index) => `<article class="card" data-reveal data-category="${e(project.category)}"><a class="card-link" href="./projects/${project.slug}/">
+  const cards = snapshot.projects.map((project, index) => `<article class="card" data-reveal data-category="${e(project.category)}"><a class="card-link" href="./projects/${project.slug}/${pageVersion(config)}">
 <div class="card-media">${project.cover ? remoteImage(project.cover, project.title, { cover: true }) : '<div class="cover"><div class="placeholder"><span aria-hidden="true">＋</span><span>Нет материалов</span></div></div>'}<span class="card-number">/ ${String(index + 1).padStart(2, '0')}</span>${project.category ? `<span class="card-tag">${e(project.category)}</span>` : ''}<span class="card-cursor" aria-hidden="true">Открыть<br>↗</span></div>
 <div class="card-caption"><div>${project.category || project.year ? `<p>${e([project.category, project.year].filter(Boolean).join(' / '))}</p>` : ''}<h2>${e(project.title)}</h2></div><span class="card-arrow" aria-hidden="true">↗</span></div>
 </a></article>`).join('');
   const date = new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Moscow' }).format(new Date(snapshot.syncedAt));
   return layout(config, { title: config.title, content: `<section class="intro"><div class="hero-ambient" aria-hidden="true"></div><p class="hero-label">Портфолио</p><h1 class="hero-title">${brandMarkup(config, true)}</h1><a class="hero-cta" href="#works">Смотреть работы <span aria-hidden="true">↗</span></a></section>
 <section id="works" class="works-section" aria-label="Работы"><div class="section-heading" data-reveal><h2>Работы<span class="count">${String(snapshot.projects.length).padStart(2, '0')}</span></h2><span class="section-label">Портфолио / ${new Date(snapshot.syncedAt).getUTCFullYear()}</span></div>${filters}<div class="grid">${cards}</div><p class="empty-filter" hidden>В этой категории пока нет работ.</p>${!snapshot.projects.length ? '<div class="empty-state"><h2>Здесь будут работы</h2><p>Новые проекты скоро появятся.</p></div>' : ''}</section>
-<aside class="sync-note"><span class="status-dot" aria-hidden="true"></span><span>Обновлено ${e(date)} МСК</span><a href="./sync-report.html">Информация о работах ↗</a></aside>` });
+<aside class="sync-note"><span class="status-dot" aria-hidden="true"></span><span>Обновлено ${e(date)} МСК</span><a href="./sync-report.html${pageVersion(config)}">Информация о работах ↗</a></aside>` });
 }
 
 export function renderProject(config, project, next) {
   const base = '../../';
   const description = project.description.split(/\n\s*\n/).filter(Boolean).map((p) => `<p>${e(p).replaceAll('\n', '<br>')}</p>`).join('');
   const gallery = project.images.map((image) => remoteImage(image, project.title)).join('');
-  return layout(config, { title: `${project.title} — ${config.title}`, base, page: 'project', content: `<a class="back" href="${base}#works">← Все работы</a><section class="project-intro"><div><p class="eyebrow">${e([project.category, project.year].filter(Boolean).join(' / ') || 'Проект')}</p><h1>${e(project.title)}</h1></div>${description ? `<div class="description">${description}</div>` : '<p class="muted">Описание пока не добавлено.</p>'}</section><section class="gallery" aria-label="Изображения проекта">${gallery || '<div class="empty-state"><h2>Материалы скоро появятся</h2><p>Проект готовится к публикации.</p></div>'}</section>${next ? `<a class="next-project" href="../${next.slug}/" data-reveal><span>Следующий проект</span><strong>${e(next.title)}<span aria-hidden="true">↗</span></strong></a>` : ''}` });
+  return layout(config, { title: `${project.title} — ${config.title}`, base, page: 'project', content: `<a class="back" href="${base}${pageVersion(config)}#works">← Все работы</a><section class="project-intro"><div><p class="eyebrow">${e([project.category, project.year].filter(Boolean).join(' / ') || 'Проект')}</p><h1>${e(project.title)}</h1></div>${description ? `<div class="description">${description}</div>` : '<p class="muted">Описание пока не добавлено.</p>'}</section><section class="gallery" aria-label="Изображения проекта">${gallery || '<div class="empty-state"><h2>Материалы скоро появятся</h2><p>Проект готовится к публикации.</p></div>'}</section>${next ? `<a class="next-project" href="../${next.slug}/${pageVersion(config)}" data-reveal><span>Следующий проект</span><strong>${e(next.title)}<span aria-hidden="true">↗</span></strong></a>` : ''}` });
 }
 
 function renderReport(config, snapshot) {
-  return layout(config, { title: `Отчёт о загрузке — ${config.title}`, content: `<a class="back" href="./">← К портфолио</a><section class="report"><p class="eyebrow">Проверка подключения</p><h1>Отчёт о загрузке</h1><p>Папка: <strong>${e(snapshot.sourceName)}</strong></p><p>Последняя успешная синхронизация: <time datetime="${e(snapshot.syncedAt)}">${e(snapshot.syncedAt)}</time></p><p>Проектов: ${snapshot.projects.length} · Изображений: ${snapshot.projects.reduce((n, p) => n + p.images.length, 0)}</p>${snapshot.warnings.length ? `<h2>Что можно дополнить</h2><ul>${snapshot.warnings.map((w) => `<li>${e(w)}</li>`).join('')}</ul>` : '<p>Все проекты загружены без замечаний.</p>'}<p class="muted">Этот отчёт отражает последнюю сборку. Изменения на Диске появятся после следующего обновления сайта.</p></section>` });
+  return layout(config, { title: `Отчёт о загрузке — ${config.title}`, content: `<a class="back" href="./${pageVersion(config)}">← К портфолио</a><section class="report"><p class="eyebrow">Проверка подключения</p><h1>Отчёт о загрузке</h1><p>Папка: <strong>${e(snapshot.sourceName)}</strong></p><p>Последняя успешная синхронизация: <time datetime="${e(snapshot.syncedAt)}">${e(snapshot.syncedAt)}</time></p><p>Проектов: ${snapshot.projects.length} · Изображений: ${snapshot.projects.reduce((n, p) => n + p.images.length, 0)}</p>${snapshot.warnings.length ? `<h2>Что можно дополнить</h2><ul>${snapshot.warnings.map((w) => `<li>${e(w)}</li>`).join('')}</ul>` : '<p>Все проекты загружены без замечаний.</p>'}<p class="muted">Этот отчёт отражает последнюю сборку. Изменения на Диске появятся после следующего обновления сайта.</p></section>` });
 }
 
 export async function buildPortfolio(root = process.cwd(), { skipUnchanged = false } = {}) {
