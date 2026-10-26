@@ -1,0 +1,14 @@
+{
+  "name": "design-portfolio",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "sync": "node scripts/sync.mjs",
+    "build": "node scripts/build.mjs",
+    "refresh": "npm run sync && npm run build",
+    "dev": "node scripts/serve.mjs",
+    "preview": "node scripts/serve.mjs --static",
+    "test": "node --test"
+  }
+}
