@@ -25,16 +25,17 @@ function brandMarkup(config, hero = false) {
 }
 
 function layout(config, { title, content, base = './', page = 'home' }) {
+  const asset = (name) => `${base}${name}?v=${encodeURIComponent(config.version || '1')}`;
   return `<!doctype html>
 <html lang="ru"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="portfolio-version" content="${e(config.version || '')}">
 <meta name="portfolio-source" content="${e(config.publicUrl || '')}">
 <title>${e(title)}</title><meta name="description" content="${e(config.description)}">
-<link rel="icon" href="${base}favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="${base}style.css"><script src="${base}app.js" defer></script>
-<script src="${base}media.js" type="module"></script>
-<script src="${base}motion.js" type="module"></script>
+<link rel="icon" href="${asset('favicon.svg')}" type="image/svg+xml">
+<link rel="stylesheet" href="${asset('style.css')}"><script src="${asset('app.js')}" defer></script>
+<script src="${asset('media.js')}" type="module"></script>
+<script src="${asset('motion.js')}" type="module"></script>
 </head><body id="top" data-page="${page}">
 <div class="scroll-progress" aria-hidden="true"></div>
 <a class="skip-link" href="#main">К содержимому</a>
