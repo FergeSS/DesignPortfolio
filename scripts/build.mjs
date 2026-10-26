@@ -18,6 +18,12 @@ async function siteVersion(root, config, snapshot) {
   return hash(JSON.stringify({ config, content, sources, renderer: hash(await readFile(new URL(import.meta.url))) }));
 }
 
+function brandMarkup(config, hero = false) {
+  const [first, ...rest] = (config.brand || 'Ferg Design').trim().split(/\s+/);
+  if (hero) return `<span>${e(first)}</span>${rest.length ? ` <span class="gradient-text">${e(rest.join(' '))}</span>` : ''}`;
+  return `${e(first)}${rest.length ? ` <span>${e(rest.join(' '))}</span>` : ''}`;
+}
+
 function layout(config, { title, content, base = './', page = 'home' }) {
   return `<!doctype html>
 <html lang="ru"><head>
@@ -32,16 +38,12 @@ function layout(config, { title, content, base = './', page = 'home' }) {
 </head><body id="top" data-page="${page}">
 <div class="scroll-progress" aria-hidden="true"></div>
 <a class="skip-link" href="#main">К содержимому</a>
-<header class="header"><a class="brand" href="${base}" aria-label="${e(config.brand || config.title)} — главная"><span class="brand-mark" aria-hidden="true">f<span>.</span></span><span>${e(config.brand || 'ПОРТФОЛИО')}<small>VISUAL DESIGNER</small></span></a><nav aria-label="Основная навигация"><a class="nav-link" href="${base}#works">Работы<span aria-hidden="true">↗</span></a><span class="nav-note">Независимый дизайн</span><a class="nav-index" href="${base}#top" aria-label="К началу страницы">[ F / D ]</a></nav></header>
+<header class="header"><a class="brand" href="${base}" aria-label="${e(config.brand || 'Ferg Design')} — главная">${brandMarkup(config)}</a><nav aria-label="Основная навигация"><a class="nav-link" href="${base}#works">Работы <span aria-hidden="true">↗</span></a></nav></header>
 <main id="main">${content}</main>
 <noscript><p>Для загрузки изображений нужен JavaScript. <a href="${e(config.publicUrl)}">Посмотреть работы на Яндекс Диске</a></p></noscript>
-<footer><a class="footer-brand" href="${base}#top">${e(config.brand || 'ПОРТФОЛИО')}<span>✳</span></a><span>Идея. Форма. Характер.</span><a class="footer-top" href="#top">Наверх <span aria-hidden="true">↑</span></a></footer>
+<footer><a class="footer-brand" href="${base}#top">${brandMarkup(config)}</a><a class="footer-top" href="#top">Наверх <span aria-hidden="true">↑</span></a></footer>
 <dialog id="lightbox" aria-label="Просмотр изображения"><button class="close-viewer" aria-label="Закрыть изображение"><span>Закрыть</span> ×</button><p class="viewer-status" role="status" hidden></p><a class="viewer-source" target="_blank" rel="noopener noreferrer" hidden>Открыть папку на Диске ↗</a><img alt="" referrerpolicy="no-referrer"></dialog>
 </body></html>`;
-}
-
-function kineticMark() {
-  return `<div class="hero-art" aria-hidden="true"><span class="art-corner corner-tl">+</span><span class="art-corner corner-tr">+</span><span class="art-corner corner-bl">+</span><span class="art-corner corner-br">+</span><span class="art-label">FIG. 001 / VISUAL ENERGY</span><svg class="kinetic-mark" viewBox="0 0 400 400" fill="none"><defs><path id="orbit-text" d="M200 24a176 176 0 1 1-.1 0"/></defs><circle class="orbit-line" cx="200" cy="200" r="155"/><circle class="orbit-line dashed" cx="200" cy="200" r="122"/><g class="orbit-type"><text><textPath href="#orbit-text" textLength="1105" lengthAdjust="spacing">FORM FOLLOWS FEELING / MAKE IT LOUD / FORM FOLLOWS FEELING / MAKE IT LOUD / </textPath></text></g><g class="star"><path d="M176 60h48l-5 89 59-67 34 34-67 59 89-5v48l-89-5 67 59-34 34-59-67 5 89h-48l5-89-59 67-34-34 67-59-89 5v-48l89 5-67-59 34-34 59 67z" fill="currentColor"/></g><circle cx="200" cy="194" r="30" fill="#101010"/><path d="M190 180h25v7h-17v6h14v7h-14v13h-8z" fill="currentColor"/><circle class="orbit-dot" cx="355" cy="200" r="4" fill="currentColor"/></svg><span class="art-coordinate">VECTOR / 360°</span><span class="art-caption">Порядок внутри хаоса.</span></div>`;
 }
 
 function remoteImage(image, title, { cover = false } = {}) {
@@ -53,15 +55,12 @@ export function renderHome(config, snapshot) {
   const categories = [...new Set(snapshot.projects.map((p) => p.category).filter(Boolean))];
   const filters = categories.length ? `<div class="filters" role="group" aria-label="Категория работ"><button class="filter active" data-filter="" aria-pressed="true">Все работы</button>${categories.map((category) => `<button class="filter" data-filter="${e(category)}" aria-pressed="false">${e(category)}</button>`).join('')}</div>` : '';
   const cards = snapshot.projects.map((project, index) => `<article class="card" data-reveal data-category="${e(project.category)}"><a class="card-link" href="./projects/${project.slug}/">
-<div class="card-media">${project.cover ? remoteImage(project.cover, project.title, { cover: true }) : '<div class="cover"><div class="placeholder"><span aria-hidden="true">＋</span><span>Нет материалов</span></div></div>'}<span class="card-number">/ ${String(index + 1).padStart(2, '0')}</span><span class="card-tag">${e(project.category || 'VISUAL DESIGN')}</span><span class="card-cursor" aria-hidden="true">Смотреть<br>↗</span></div>
-<div class="card-caption"><div><p>${e([project.category || 'Визуальный дизайн', project.year].filter(Boolean).join(' / '))}</p><h2>${e(project.title)}</h2></div><span class="card-arrow" aria-hidden="true">↗</span></div>
+<div class="card-media">${project.cover ? remoteImage(project.cover, project.title, { cover: true }) : '<div class="cover"><div class="placeholder"><span aria-hidden="true">＋</span><span>Нет материалов</span></div></div>'}<span class="card-number">/ ${String(index + 1).padStart(2, '0')}</span>${project.category ? `<span class="card-tag">${e(project.category)}</span>` : ''}<span class="card-cursor" aria-hidden="true">Открыть<br>↗</span></div>
+<div class="card-caption"><div>${project.category || project.year ? `<p>${e([project.category, project.year].filter(Boolean).join(' / '))}</p>` : ''}<h2>${e(project.title)}</h2></div><span class="card-arrow" aria-hidden="true">↗</span></div>
 </a></article>`).join('');
   const date = new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Moscow' }).format(new Date(snapshot.syncedAt));
-  const ticker = '<span>ИДЕЯ</span><b>✳</b><span>ФОРМА</span><b>✳</b><span>ХАРАКТЕР</span><b>✳</b><span>ДВИЖЕНИЕ</span><b>✳</b>';
-  return layout(config, { title: config.title, content: `<section class="intro" ><div class="intro-main"><p class="eyebrow hero-eyebrow"><span class="status-dot"></span> Портфолио / Визуальный дизайн</p><h1 class="hero-title"><span class="hero-line"><span>ДЕЛАЮ</span></span><span class="hero-line"><span>ГРОМКО<span class="hero-period">.</span></span></span><span class="sr-only"> Визуальный дизайн с характером.</span></h1><div class="hero-bottom"><p class="intro-text">${e(config.description)}</p><a class="hero-cta magnetic" href="#works"><span>Смотреть работы</span><span class="cta-arrow" aria-hidden="true">↘</span></a></div></div>${kineticMark()}<div class="hero-foot"><span>ВИЗУАЛ, КОТОРЫЙ ОСТАЁТСЯ В ГОЛОВЕ.</span><a href="#works">Листай вниз <span aria-hidden="true">↓</span></a><span>[ ПРОЕКТОВ: ${String(snapshot.projects.length).padStart(2, '0')} ]</span></div></section>
-<div class="marquee" aria-label="Идея. Форма. Характер. Движение."><div class="marquee-track" aria-hidden="true"><div>${ticker}</div><div>${ticker}</div></div></div>
-<section id="works" class="works-section" aria-label="Работы"><div class="section-heading" data-reveal><div><p class="eyebrow"><span class="red">/ 01</span> &nbsp; SELECTED WORKS</p><h2>Меньше слов.<br><span>Больше визуала.</span></h2></div><div class="section-meta"><span class="works-count">${String(snapshot.projects.length).padStart(2, '0')}</span><span>ПРОЕКТЫ / ПОРТФОЛИО</span></div></div>${filters}<div class="grid">${cards}</div><p class="empty-filter" hidden>В этой категории пока нет работ.</p>${!snapshot.projects.length ? '<div class="empty-state"><h2>Здесь будут работы</h2><p>Новые проекты скоро появятся.</p></div>' : ''}</section>
-<section class="closing" data-reveal><p class="eyebrow">НЕ ПРОСТО КАРТИНКА. ОЩУЩЕНИЕ.</p><p class="closing-title">У КАЖДОЙ ИДЕИ<br>ЕСТЬ <em>ХАРАКТЕР<span>↗</span></em></p><a href="#top" class="closing-link">Вернуться к началу <span aria-hidden="true">↑</span></a></section>
+  return layout(config, { title: config.title, content: `<section class="intro"><div class="hero-ambient" aria-hidden="true"></div><p class="hero-label">Портфолио</p><h1 class="hero-title">${brandMarkup(config, true)}</h1><a class="hero-cta" href="#works">Смотреть работы <span aria-hidden="true">↗</span></a></section>
+<section id="works" class="works-section" aria-label="Работы"><div class="section-heading" data-reveal><h2>Работы<span class="count">${String(snapshot.projects.length).padStart(2, '0')}</span></h2><span class="section-label">Портфолио / ${new Date(snapshot.syncedAt).getUTCFullYear()}</span></div>${filters}<div class="grid">${cards}</div><p class="empty-filter" hidden>В этой категории пока нет работ.</p>${!snapshot.projects.length ? '<div class="empty-state"><h2>Здесь будут работы</h2><p>Новые проекты скоро появятся.</p></div>' : ''}</section>
 <aside class="sync-note"><span class="status-dot" aria-hidden="true"></span><span>Обновлено ${e(date)} МСК</span><a href="./sync-report.html">Информация о работах ↗</a></aside>` });
 }
 
@@ -69,7 +68,7 @@ export function renderProject(config, project, next) {
   const base = '../../';
   const description = project.description.split(/\n\s*\n/).filter(Boolean).map((p) => `<p>${e(p).replaceAll('\n', '<br>')}</p>`).join('');
   const gallery = project.images.map((image) => remoteImage(image, project.title)).join('');
-  return layout(config, { title: `${project.title} — ${config.title}`, base, page: 'project', content: `<a class="back" href="${base}#works">← Все работы</a><section class="project-intro"><div><p class="eyebrow"><span class="red">/ PROJECT</span> &nbsp; ${e([project.category, project.year].filter(Boolean).join(' / ') || 'ВИЗУАЛЬНЫЙ ДИЗАЙН')}</p><h1>${e(project.title)}<span class="red">.</span></h1></div>${description ? `<div class="description">${description}</div>` : '<p class="muted">Описание пока не добавлено.</p>'}</section><section class="gallery" aria-label="Изображения проекта">${gallery || '<div class="empty-state"><h2>Материалы скоро появятся</h2><p>Проект готовится к публикации.</p></div>'}</section>${next ? `<a class="next-project" href="../${next.slug}/" data-reveal><span>Дальше — больше / Следующий проект</span><strong>${e(next.title)}<span aria-hidden="true">↗</span></strong></a>` : ''}` });
+  return layout(config, { title: `${project.title} — ${config.title}`, base, page: 'project', content: `<a class="back" href="${base}#works">← Все работы</a><section class="project-intro"><div><p class="eyebrow">${e([project.category, project.year].filter(Boolean).join(' / ') || 'Проект')}</p><h1>${e(project.title)}</h1></div>${description ? `<div class="description">${description}</div>` : '<p class="muted">Описание пока не добавлено.</p>'}</section><section class="gallery" aria-label="Изображения проекта">${gallery || '<div class="empty-state"><h2>Материалы скоро появятся</h2><p>Проект готовится к публикации.</p></div>'}</section>${next ? `<a class="next-project" href="../${next.slug}/" data-reveal><span>Следующий проект</span><strong>${e(next.title)}<span aria-hidden="true">↗</span></strong></a>` : ''}` });
 }
 
 function renderReport(config, snapshot) {

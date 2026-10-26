@@ -37,13 +37,7 @@ export function initMotion({ document, window }) {
         card.style.setProperty('--cursor-y', `${event.clientY - bounds.top}px`);
       }, { passive: true });
     }
-    const artwork = document.querySelector('.hero-art');
-    artwork?.addEventListener('pointermove', (event) => {
-      if (reduced.matches) return;
-      const bounds = artwork.getBoundingClientRect();
-      artwork.style.setProperty('--art-angle', `${-8 + (event.clientX - bounds.left) / bounds.width * 16}deg`);
-    }, { passive: true });
-    artwork?.addEventListener('pointerleave', () => artwork.style.removeProperty('--art-angle'));
+
   }
   return () => {
     window.removeEventListener('scroll', onScroll);

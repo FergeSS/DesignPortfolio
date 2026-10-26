@@ -1,8 +1,11 @@
 {
-  "title": "Дизайн-портфолио",
-  "brand": "FERGES",
-  "description": "Идеи, которые становятся визуалом. Дизайн, у которого есть характер.",
+  "title": "Ferg Design — портфолио",
+  "brand": "Ferg Design",
+  "description": "Ferg Design — портфолио дизайнерских работ.",
   "publicUrl": "https://disk.yandex.ru/d/Mof2CXO0xoRqzA",
   "sourcePath": "/",
-  "ignoredFolders": ["Черновики", "Drafts"]
+  "ignoredFolders": [
+    "Черновики",
+    "Drafts"
+  ]
 }
