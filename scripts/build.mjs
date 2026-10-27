@@ -39,7 +39,7 @@ function layout(config, { title, content, base = './', page = 'home', atmosphere
 <meta name="portfolio-version" content="${e(config.version || '')}"><meta name="portfolio-source" content="${e(config.publicUrl || '')}">
 <title>${e(title)}</title><meta name="description" content="${e(config.description)}">
 <link rel="icon" href="${asset('favicon.svg')}" type="image/svg+xml">
-<link rel="preload" href="${base}fonts/onest-regular.ttf" as="font" type="font/ttf" crossorigin>
+<link rel="preload" href="${base}fonts/jost-regular.ttf" as="font" type="font/ttf" crossorigin>
 <link rel="stylesheet" href="${asset('style.css')}"><script src="${asset('app.js')}" defer></script>
 <script src="${asset('media.js')}" type="module"></script><script src="${asset('motion.js')}" type="module"></script><script src="${asset('portfolio-ui.js')}" type="module"></script>
 </head><body id="top" data-page="${page}">
