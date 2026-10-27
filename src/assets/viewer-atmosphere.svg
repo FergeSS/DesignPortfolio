@@ -1,0 +1,22 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="1440" height="960" viewBox="0 0 1440 960" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Fullscreen atmosphere &#194;&#183; 1" clip-path="url(#clip0_0_14)">
+<g id="Quiet reflected light" filter="url(#filter0_f_0_14)">
+<ellipse cx="70" cy="515" rx="350" ry="325" fill="url(#paint0_radial_0_14)"/>
+</g>
+</g>
+<defs>
+<filter id="filter0_f_0_14" x="-380" y="90" width="900" height="850" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+<feGaussianBlur stdDeviation="50" result="effect1_foregroundBlur_0_14"/>
+</filter>
+<radialGradient id="paint0_radial_0_14" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(70 515) scale(350 325)">
+<stop stop-color="#64596F" stop-opacity="0.11"/>
+<stop offset="0.48" stop-color="#64596F" stop-opacity="0.0418"/>
+<stop offset="1" stop-color="#64596F" stop-opacity="0"/>
+</radialGradient>
+<clipPath id="clip0_0_14">
+<rect width="1440" height="960" fill="white"/>
+</clipPath>
+</defs>
+</svg>

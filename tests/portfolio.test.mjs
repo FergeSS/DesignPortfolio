@@ -74,7 +74,7 @@ test('end-to-end: paginated catalog, Unicode paths and static pages without down
   assert.ok(home.includes('data-disk-mode="preview"'));
   assert.ok(home.includes('referrerpolicy="no-referrer"'), 'Yandex media rejects a foreign Referer header');
   assert.ok(project.includes('data-disk-mode="full"'));
-  assert.ok(!project.includes('src="../../assets/'));
+  assert.ok(!project.includes('<img class="remote-image" src='), 'portfolio images must resolve from Disk only when visible');
   assert.ok(data.projects[0].images.every((image) => !image.src));
   await assert.rejects(access(resolve(root, 'dist/assets')));
   await assert.rejects(access(resolve(root, '.cache/assets')));

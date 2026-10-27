@@ -20,6 +20,7 @@ test('media URLs: Unicode paths, fresh preview vs original, cache expiry and no 
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url.searchParams.get('path'), path);
   assert.equal(calls[0].url.searchParams.get('preview_size'), 'XL');
+  assert.equal(calls[0].url.searchParams.get('preview_crop'), 'false', 'mosaic previews must keep the original cover proportions');
   assert.equal(calls[0].options.credentials, 'omit');
   const full = await resolveMedia(path);
   assert.notEqual(full, first);
@@ -60,7 +61,7 @@ test('media resolver bounds concurrency and handles denied or invalid URLs', asy
   await assert.rejects(invalid('/image.png'), /не выдал ссылку/);
 });
 
-function fakePage(resolver) {
+function fakePage(resolver, viewer = null) {
   class Image extends EventTarget {
     naturalWidth = 1200;
     naturalHeight = 800;
@@ -90,7 +91,7 @@ function fakePage(resolver) {
     clearTimeout: (callback) => timers.delete(callback),
     addEventListener() {}, removeEventListener() {},
   };
-  const document = { querySelectorAll: () => [frame], querySelector: () => null };
+  const document = { body: { style: { overflow: 'hidden' } }, querySelectorAll: (selector) => selector === '.remote-media' ? [frame] : [], querySelector: (selector) => selector === '#lightbox' ? viewer : null };
   const loader = mountMedia({ document, window, publicUrl: 'https://disk.yandex.ru/d/test', resolveMedia: resolver });
   return { loader, image, status, actions, frame, dimensions, timers, observer: (entries) => observer(entries) };
 }
@@ -138,4 +139,19 @@ test('unload cancels pending media and network errors show a retry state', async
   assert.equal(failed.actions.hidden, false);
   assert.ok(failed.status.textContent.includes('недоступно'));
   failed.loader.destroy();
+});
+
+test('closing the viewer releases the original image and keeps its close icon', () => {
+  const original = { src: 'https://media.example/original', removeAttribute(name) { if (name === 'src') delete this.src; } };
+  const icon = { src: '../../assets/close.svg', removeAttribute(name) { if (name === 'src') delete this.src; } };
+  const viewer = new EventTarget();
+  const close = new EventTarget();
+  viewer.querySelector = (selector) => ({ '.viewer-image': original, img: icon, '.close-viewer': close })[selector];
+  const resolver = () => {};
+  resolver.clear = () => {};
+  const page = fakePage(resolver, viewer);
+  viewer.dispatchEvent(new Event('close'));
+  assert.equal(original.src, undefined);
+  assert.equal(icon.src, '../../assets/close.svg');
+  page.loader.destroy();
 });

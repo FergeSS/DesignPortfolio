@@ -17,7 +17,7 @@ export function createMediaResolver({ publicUrl, fetchImpl = fetch, now = Date.n
     url.searchParams.set('path', path);
     if (mode === 'preview' && !endpoint) {
       url.searchParams.set('preview_size', 'XL');
-      url.searchParams.set('preview_crop', 'true');
+      url.searchParams.set('preview_crop', 'false');
     }
     const timeout = AbortSignal.timeout(20000);
     const response = await limited(() => fetchImpl(url, { signal: signal ? AbortSignal.any([signal, timeout]) : timeout, credentials: 'omit', cache: 'no-store' }), signal);
@@ -68,7 +68,14 @@ export function mountMedia({ document, window, publicUrl, resolveMedia = createM
   const frames = [...document.querySelectorAll('.remote-media')];
   const states = new WeakMap();
   const visible = new Set();
-  for (const frame of frames) states.set(frame, { generation: 0 });
+  const ratioKey = (frame) => `portfolio-ratio:${frame.dataset.diskPath}:${frame.dataset.diskRevision}`;
+  for (const frame of frames) {
+    states.set(frame, { generation: 0 });
+    try {
+      const saved = window.localStorage?.getItem(ratioKey(frame));
+      if (/^\d+ \/ \d+$/.test(saved)) frame.style.setProperty('--media-ratio', saved);
+    } catch { /* Storage can be disabled in private browsing. */ }
+  }
 
   async function show(frame, fresh = false) {
     const state = states.get(frame);
@@ -97,7 +104,12 @@ export function mountMedia({ document, window, publicUrl, resolveMedia = createM
       }
       if (state.generation !== generation) return;
       state.loaded = true;
-      if (image.naturalWidth && image.naturalHeight) frame.style.setProperty('--media-ratio', `${image.naturalWidth} / ${image.naturalHeight}`);
+      if (image.naturalWidth && image.naturalHeight) {
+        const ratio = `${image.naturalWidth} / ${image.naturalHeight}`;
+        frame.style.setProperty('--media-ratio', ratio);
+        try { window.localStorage?.setItem(ratioKey(frame), ratio); } catch { /* Optional layout cache. */ }
+        if (window.CustomEvent) frame.dispatchEvent(new window.CustomEvent('mediaready', { bubbles: true }));
+      }
       frame.dataset.state = 'loaded';
       status.hidden = true;
     } catch (error) {
@@ -143,46 +155,99 @@ export function mountMedia({ document, window, publicUrl, resolveMedia = createM
   }
 
   const viewer = document.querySelector('#lightbox');
+  const gallery = [...document.querySelectorAll('.gallery-frame')];
+  const thumbnails = [...document.querySelectorAll('[data-select-image]')];
+  let selected = 0;
   let viewerController;
-  if (viewer) {
-    const image = viewer.querySelector('img');
+  const pad = (n) => String(n).padStart(2, '0');
+  const count = () => `${pad(selected + 1)} / ${pad(gallery.length)}`;
+  const dimensions = (frame) => {
+    const image = frame?.querySelector('img');
+    return image?.naturalWidth && image?.naturalHeight ? `${image.naturalWidth} × ${image.naturalHeight}` : '—';
+  };
+  function updateInformation() {
+    const frame = gallery[selected];
+    if (!frame) return;
+    for (const node of document.querySelectorAll('[data-image-count]')) node.textContent = count();
+    for (const node of document.querySelectorAll('[data-image-dimensions]')) node.textContent = dimensions(frame);
+    for (const node of document.querySelectorAll('[data-image-format]')) node.textContent = frame.dataset.format;
+    for (const node of document.querySelectorAll('[data-image-summary]')) node.textContent = `${dimensions(frame)} · ${frame.dataset.format}`;
+    const thumb = thumbnails[selected]?.querySelector('.remote-media');
+    if (thumb) thumb.style.setProperty('--media-ratio', frame.style.getPropertyValue('--media-ratio'));
+  }
+  function select(index) {
+    if (!gallery.length) return;
+    const previous = gallery[selected];
+    selected = (index + gallery.length) % gallery.length;
+    gallery.forEach((frame, i) => { frame.hidden = i !== selected; });
+    thumbnails.forEach((button, i) => { button.classList.toggle('selected', i === selected); button.setAttribute('aria-pressed', String(i === selected)); });
+    if (previous !== gallery[selected]) { visible.delete(previous); release(previous); }
+    visible.add(gallery[selected]);
+    void show(gallery[selected]);
+    updateInformation();
+  }
+  gallery.forEach((frame, index) => {
+    frame.setAttribute('role', 'button');
+    frame.setAttribute('tabindex', '0');
+    frame.setAttribute('aria-label', `На весь экран: ${frame.dataset.name}`);
+    frame.addEventListener('mediaready', updateInformation);
+    frame.addEventListener('click', (event) => { if (event.target.closest('button,a')) return; selected = index; void openViewer(); });
+    frame.addEventListener('keydown', (event) => { if (event.target === frame && ['Enter', ' '].includes(event.key)) { event.preventDefault(); selected = index; void openViewer(); } });
+  });
+  thumbnails.forEach((button, index) => button.addEventListener('click', () => select(index)));
+  document.querySelector('.expand-viewer')?.addEventListener('click', () => { void openViewer(); });
+  async function openViewer() {
+    const frame = gallery[selected];
+    if (!viewer || !frame) return;
+    viewerController?.abort();
+    viewerController = new AbortController();
+    const { signal } = viewerController;
+    const image = viewer.querySelector('.viewer-image');
     const status = viewer.querySelector('.viewer-status');
     const link = viewer.querySelector('.viewer-source');
+    const revision = frame.dataset.diskRevision;
+    image.removeAttribute('src');
+    image.alt = frame.querySelector('img').alt;
+    status.textContent = 'Загрузка изображения…';
+    status.hidden = false;
     link.href = publicUrl;
-    for (const button of document.querySelectorAll('[data-disk-full]')) {
-      button.addEventListener('click', async () => {
-        viewerController?.abort();
-        viewerController = new AbortController();
-        const { signal } = viewerController;
-        const revision = button.closest('.remote-media').dataset.diskRevision;
-        image.alt = button.querySelector('img').alt;
-        status.textContent = 'Загрузка изображения…';
-        status.hidden = false;
-        link.hidden = true;
-        viewer.showModal();
-        document.body.style.overflow = 'hidden';
-        try {
-          const url = await resolveMedia(button.dataset.diskFull, { mode: 'full', revision, signal });
-          try { await loadImage(image, url, signal); }
-          catch (error) {
-            if (signal.aborted) throw error;
-            await loadImage(image, await resolveMedia(button.dataset.diskFull, { mode: 'full', revision, signal, fresh: true }), signal);
-          }
-          if (!signal.aborted) status.hidden = true;
-        } catch {
-          if (signal.aborted) return;
-          resolveMedia.clear();
-          status.textContent = 'Не удалось загрузить изображение. Попробуй открыть его ещё раз.';
-          link.hidden = false;
-        }
-      });
+    link.hidden = true;
+    viewer.querySelector('.viewer-title').textContent = document.querySelector('.gallery').dataset.projectTitle;
+    viewer.querySelector('.viewer-count').textContent = count();
+    viewer.querySelector('.viewer-dimensions').textContent = `${dimensions(frame)} · ${frame.dataset.format}`;
+    viewer.querySelector('.viewer-navigation').hidden = gallery.length < 2;
+    if (!viewer.open) { viewer.showModal(); document.body.style.overflow = 'hidden'; }
+    try {
+      const options = { mode: 'full', revision, signal };
+      const url = await resolveMedia(frame.dataset.diskPath, options);
+      try { await loadImage(image, url, signal); }
+      catch (error) {
+        if (signal.aborted) throw error;
+        await loadImage(image, await resolveMedia(frame.dataset.diskPath, { ...options, fresh: true }), signal);
+      }
+      if (!signal.aborted) {
+        status.hidden = true;
+        viewer.querySelector('.viewer-dimensions').textContent = `${image.naturalWidth} × ${image.naturalHeight} · ${frame.dataset.format}`;
+      }
+    } catch {
+      if (signal.aborted) return;
+      resolveMedia.clear();
+      status.textContent = 'Не удалось загрузить изображение. Попробуй открыть его ещё раз.';
+      link.hidden = false;
     }
-    viewer.querySelector('button').addEventListener('click', () => viewer.close());
-    viewer.addEventListener('click', (event) => { if (event.target === viewer) viewer.close(); });
+  }
+  function step(delta) { select(selected + delta); void openViewer(); }
+  if (viewer) {
+    viewer.querySelector('.close-viewer')?.addEventListener('click', () => viewer.close());
+    viewer.querySelector('.viewer-prev')?.addEventListener('click', () => step(-1));
+    viewer.querySelector('.viewer-next')?.addEventListener('click', () => step(1));
+    viewer.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); step(event.key === 'ArrowLeft' ? -1 : 1); }
+    });
     viewer.addEventListener('close', () => {
       viewerController?.abort();
       document.body.style.overflow = '';
-      image.removeAttribute('src');
+      viewer.querySelector('.viewer-image').removeAttribute('src');
     });
   }
 
