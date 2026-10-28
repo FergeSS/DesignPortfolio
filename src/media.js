@@ -64,6 +64,22 @@ export function loadImage(image, url, signal) {
   });
 }
 
+function updateCardGlow(frame, image) {
+  const canvas = frame.closest?.('.card')?.querySelector('.card-glow');
+  if (!canvas) return;
+  canvas.classList.remove('is-ready');
+  // Reuse the decoded preview. No pixel reads or second network request are needed.
+  canvas.width = image ? 48 : 0;
+  canvas.height = image ? 32 : 0;
+  if (!image) return;
+  try {
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    canvas.classList.add('is-ready');
+  } catch { /* A decorative effect must never interrupt loading the cover. */ }
+}
+
 export function mountMedia({ document, window, publicUrl, resolveMedia = createMediaResolver({ publicUrl }) }) {
   const frames = [...document.querySelectorAll('.remote-media')];
   const states = new WeakMap();
@@ -104,6 +120,7 @@ export function mountMedia({ document, window, publicUrl, resolveMedia = createM
       }
       if (state.generation !== generation) return;
       state.loaded = true;
+      updateCardGlow(frame, image);
       if (image.naturalWidth && image.naturalHeight) {
         const ratio = `${image.naturalWidth} / ${image.naturalHeight}`;
         frame.style.setProperty('--media-ratio', ratio);
@@ -129,6 +146,7 @@ export function mountMedia({ document, window, publicUrl, resolveMedia = createM
     state.controller?.abort();
     state.loading = false;
     state.loaded = false;
+    updateCardGlow(frame, null);
     frame.querySelector('img').removeAttribute('src');
     frame.dataset.state = 'idle';
   }

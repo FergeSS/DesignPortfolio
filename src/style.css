@@ -44,7 +44,10 @@ a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px soli
 .section-heading h2 { font-size: 28px; font-weight: 500; line-height: 38px; }
 .count, .caption { font-size: 13px; color: var(--muted); line-height: 1.5; }
 .grid { display: flex; flex-wrap: wrap; gap: 24px; align-items: stretch; }
-.card { width: calc((100% - 24px) / 2); border-radius: var(--radius); padding: 10px 10px 14px; min-width: 0; overflow: hidden; transition: border-color .3s, box-shadow .3s; }
+.card { position: relative; isolation: isolate; width: calc((100% - 24px) / 2); border-radius: var(--radius); padding: 10px 10px 14px; min-width: 0; transition: border-color .3s, box-shadow .3s; }
+.card-glow { position: absolute; z-index: -1; inset: 6px; width: calc(100% - 12px); height: calc(100% - 12px); border-radius: inherit; filter: blur(32px) saturate(1.4); opacity: 0; pointer-events: none; transition: opacity .6s var(--ease); }
+.card-glow.is-ready { opacity: .32; }
+.card:hover .card-glow.is-ready, .card:focus-within .card-glow.is-ready { opacity: .44; }
 .card-link { display: flex; flex-direction: column; gap: 12px; height: 100%; }
 .cover { position: relative; aspect-ratio: var(--media-ratio,16/9); background: #17171e; overflow: hidden; border-radius: 17px; }
 .remote-image { display: block; width: 100%; height: 100%; object-fit: contain; }
@@ -148,6 +151,7 @@ dialog[open] { animation: viewer-enter .3s var(--ease); }
   .section-heading h2 { font-size: 25px; }
   .grid { gap: 16px; }
   .card { width: 100%; padding: 8px 8px 10px; }
+  .card-glow { filter: blur(24px) saturate(1.4); }
   .card-link { gap: 8px; }
   .cover { border-radius: 15px; }
   .card-caption { min-height: 40px; }

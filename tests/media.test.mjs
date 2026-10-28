@@ -74,10 +74,14 @@ function fakePage(resolver, viewer = null) {
   const status = { hidden: false, textContent: '' };
   const actions = { hidden: true };
   const dimensions = new Map();
+  const glowClasses = new Set();
+  const glowDraws = [];
+  const glow = { width: 0, height: 0, classList: { add: (value) => glowClasses.add(value), remove: (value) => glowClasses.delete(value) }, getContext: () => ({ drawImage: (...args) => glowDraws.push(args) }) };
   const frame = {
     dataset: { diskPath: '/Работа/01.png', diskMode: 'full', diskRevision: '1' },
     style: { setProperty: (key, value) => dimensions.set(key, value) },
     querySelector: (selector) => ({ img: image, '.media-status': status, '.media-actions': actions })[selector],
+    closest: () => ({ querySelector: () => glow }),
   };
   const timers = new Set();
   let observer;
@@ -93,7 +97,7 @@ function fakePage(resolver, viewer = null) {
   };
   const document = { body: { style: { overflow: 'hidden' } }, querySelectorAll: (selector) => selector === '.remote-media' ? [frame] : [], querySelector: (selector) => selector === '#lightbox' ? viewer : null };
   const loader = mountMedia({ document, window, publicUrl: 'https://disk.yandex.ru/d/test', resolveMedia: resolver });
-  return { loader, image, status, actions, frame, dimensions, timers, observer: (entries) => observer(entries) };
+  return { loader, image, status, actions, frame, dimensions, timers, glow, glowClasses, glowDraws, observer: (entries) => observer(entries) };
 }
 
 test('visible media loads on demand, refreshes expired links, unloads outside the viewport and keeps its dimensions', async () => {
@@ -106,11 +110,16 @@ test('visible media loads on demand, refreshes expired links, unloads outside th
   assert.equal(calls.length, 2, 'an expired link is resolved once more');
   assert.equal(page.frame.dataset.state, 'loaded');
   assert.equal(page.status.hidden, true);
+  assert.equal(page.glowClasses.has('is-ready'), true);
+  assert.equal(page.glow.width * page.glow.height, 1536, 'glow retains only a tiny copy of the preview');
+  assert.equal(page.glowDraws[0][0], page.image, 'glow reuses the loaded image without another media request');
   assert.equal(page.dimensions.get('--media-ratio'), '1200 / 800');
   page.observer([{ target: page.frame, isIntersecting: false }]);
   for (const timer of [...page.timers]) timer();
   assert.equal(page.image.src, undefined);
   assert.equal(page.frame.dataset.state, 'idle');
+  assert.equal(page.glowClasses.has('is-ready'), false);
+  assert.equal(page.glow.width * page.glow.height, 0, 'offscreen glow releases its backing store');
   assert.equal(page.dimensions.get('--media-ratio'), '1200 / 800', 'unloading must not collapse the gallery');
   await page.loader.show(page.frame);
   assert.equal(page.frame.dataset.state, 'loaded');
