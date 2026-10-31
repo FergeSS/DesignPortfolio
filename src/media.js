@@ -147,6 +147,8 @@ export function mountMedia({ document, window, publicUrl, resolveMedia = createM
     state.loading = false;
     state.loaded = false;
     updateCardGlow(frame, null);
+    frame.querySelector('.transition-preview')?.remove();
+    frame.classList?.remove('has-transition-preview');
     frame.querySelector('img').removeAttribute('src');
     frame.dataset.state = 'idle';
   }
@@ -274,9 +276,4 @@ export function mountMedia({ document, window, publicUrl, resolveMedia = createM
   window.addEventListener('pagehide', hide);
   window.addEventListener('pageshow', restore);
   return { show, release, destroy() { hide(); observer?.disconnect(); window.removeEventListener('pagehide', hide); window.removeEventListener('pageshow', restore); } };
-}
-
-if (typeof document !== 'undefined') {
-  const publicUrl = document.querySelector('meta[name="portfolio-source"]')?.content;
-  if (publicUrl) mountMedia({ document, window, publicUrl });
 }

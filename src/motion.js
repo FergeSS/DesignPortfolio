@@ -68,20 +68,82 @@ export function initMotion({ document, window }) {
   const root = document.documentElement;
   const destroyHeroScroll = initHeroScroll({ document, window, reduced });
   let observer;
-  if (!reduced.matches && window.IntersectionObserver) {
+  const elements = [...document.querySelectorAll('[data-reveal]')];
+  elements.forEach((element, i) => element.style.setProperty('--entry-angle', `${i % 2 ? .8 : -.8}deg`));
+  function reveal() {
+    if (reduced.matches || !window.IntersectionObserver) return;
     observer = new window.IntersectionObserver((entries) => {
-      for (const entry of entries) if (entry.isIntersecting) {
+      const entering = entries.filter((entry) => entry.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top || a.boundingClientRect.left - b.boundingClientRect.left);
+      entering.forEach((entry, index) => {
+        entry.target.style.setProperty('--entry-delay', `${Math.min(index, 3) * 80}ms`);
         entry.target.classList.add('is-visible');
         observer.unobserve(entry.target);
-      }
-    }, { threshold: .06 });
+      });
+    }, { threshold: .08 });
     root.classList.add('motion-ready');
-    for (const element of document.querySelectorAll('[data-reveal]')) observer.observe(element);
+    for (const element of elements) if (!element.classList.contains('is-visible')) observer.observe(element);
   }
+  reveal();
   const resetMotion = () => {
-    if (reduced.matches) { observer?.disconnect(); root.classList.remove('motion-ready'); }
+    observer?.disconnect();
+    root.classList.remove('motion-ready');
+    if (reduced.matches) elements.forEach((element) => element.classList.add('is-visible'));
+    else reveal();
   };
   reduced.addEventListener('change', resetMotion);
   return () => { destroyHeroScroll(); reduced.removeEventListener('change', resetMotion); observer?.disconnect(); root.classList.remove('motion-ready'); };
 }
-if (typeof document !== 'undefined') initMotion({ document, window });
+
+export function initCardInteractions({ document, window }) {
+  const grid = document.querySelector('.grid');
+  if (!grid) return () => {};
+  const hover = window.matchMedia('(hover: hover) and (pointer: fine)');
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+  let active;
+  let request;
+  let pointer;
+  function reset() {
+    if (request !== undefined) window.cancelAnimationFrame(request);
+    request = undefined;
+    if (!active) return;
+    active.classList.remove('is-tilting');
+    const surface = active.querySelector('.card-tilt');
+    for (const name of ['--tilt-x', '--tilt-y', '--glare-x', '--glare-y', '--glare-opacity']) surface?.style.removeProperty(name);
+    active = undefined;
+  }
+  function paint() {
+    request = undefined;
+    if (!active) return;
+    const bounds = active.getBoundingClientRect();
+    const x = Math.min(1, Math.max(0, (pointer.x - bounds.left) / bounds.width));
+    const y = Math.min(1, Math.max(0, (pointer.y - bounds.top) / bounds.height));
+    const surface = active.querySelector('.card-tilt');
+    if (!surface) return;
+    surface.style.setProperty('--tilt-x', `${((.5 - y) * 4).toFixed(2)}deg`);
+    surface.style.setProperty('--tilt-y', `${((x - .5) * 5).toFixed(2)}deg`);
+    surface.style.setProperty('--glare-x', `${(x * 100).toFixed(1)}%`);
+    surface.style.setProperty('--glare-y', `${(y * 100).toFixed(1)}%`);
+    surface.style.setProperty('--glare-opacity', '1');
+  }
+  function move(event) {
+    if (reduced.matches || !hover.matches || event.pointerType !== 'mouse') return;
+    const card = event.target.closest('.card');
+    if (!card) return;
+    if (card !== active) { reset(); active = card; active.classList.add('is-tilting'); }
+    pointer = { x: event.clientX, y: event.clientY };
+    if (request === undefined) request = window.requestAnimationFrame(paint);
+  }
+  const leave = (event) => { if (active && !active.contains(event.relatedTarget)) reset(); };
+  grid.addEventListener('pointermove', move, { passive: true });
+  grid.addEventListener('pointerout', leave);
+  grid.addEventListener('pointercancel', reset);
+  document.addEventListener('visibilitychange', reset);
+  window.addEventListener('blur', reset);
+  reduced.addEventListener('change', reset);
+  hover.addEventListener('change', reset);
+  return () => {
+    reset(); grid.removeEventListener('pointermove', move); grid.removeEventListener('pointerout', leave); grid.removeEventListener('pointercancel', reset);
+    document.removeEventListener('visibilitychange', reset); window.removeEventListener('blur', reset);
+    reduced.removeEventListener('change', reset); hover.removeEventListener('change', reset);
+  };
+}

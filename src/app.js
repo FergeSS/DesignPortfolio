@@ -1,4 +1,3 @@
-const filters = document.querySelectorAll('[data-filter]');
 const scriptUrl = document.currentScript?.src;
 const currentVersion = document.querySelector('meta[name="portfolio-version"]')?.content;
 // Check the published catalog version. Media itself loads directly from Disk.
@@ -27,15 +26,20 @@ if (scriptUrl && currentVersion) {
   setInterval(checkSiteVersion, 60000);
   document.addEventListener('visibilitychange', checkSiteVersion);
 }
-const cards = document.querySelectorAll('.card');
-for (const button of filters) {
-  button.addEventListener('click', () => {
-    for (const filter of filters) {
-      const active = filter === button;
-      filter.classList.toggle('active', active);
-      filter.setAttribute('aria-pressed', String(active));
-    }
-    for (const card of cards) card.hidden = Boolean(button.dataset.filter && card.dataset.category !== button.dataset.filter);
-    document.querySelector('.empty-filter').hidden = [...cards].some((card) => !card.hidden);
-  });
+function mountFilters() {
+  const filters = document.querySelectorAll('[data-filter]');
+  const cards = document.querySelectorAll('.card');
+  for (const button of filters) {
+    button.addEventListener('click', () => {
+      for (const filter of filters) {
+        const active = filter === button;
+        filter.classList.toggle('active', active);
+        filter.setAttribute('aria-pressed', String(active));
+      }
+      for (const card of cards) card.hidden = Boolean(button.dataset.filter && card.dataset.category !== button.dataset.filter);
+      document.querySelector('.empty-filter').hidden = [...cards].some((card) => !card.hidden);
+    });
+  }
 }
+mountFilters();
+document.addEventListener('portfolio:navigate', mountFilters);

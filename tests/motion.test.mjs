@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { initHeroScroll } from '../src/motion.js';
+import { initHeroScroll, initCardInteractions } from '../src/motion.js';
 
 function scene({ reducedMotion = false, scroll = 0 } = {}) {
   const window = new EventTarget();
@@ -65,4 +65,39 @@ test('hero scroll respects reduced motion, restores deep links, resize and clean
   assert.equal(page.hero.style.values.size, 0);
   assert.equal(page.copy.style.values.size, 0);
   assert.equal(page.classes.has('hero-scroll-ready'), false);
+});
+
+test('card tilt ignores touch and reduced motion, batches pointer updates and resets on leave', () => {
+  const grid = new EventTarget();
+  const document = new EventTarget();
+  const window = new EventTarget();
+  const hover = new EventTarget(); hover.matches = true;
+  const reduced = new EventTarget(); reduced.matches = false;
+  const pending = new Map(); let serial = 0;
+  window.matchMedia = (query) => query.includes('hover') ? hover : reduced;
+  window.requestAnimationFrame = (callback) => { pending.set(++serial, callback); return serial; };
+  window.cancelAnimationFrame = (id) => pending.delete(id);
+  document.querySelector = () => grid;
+  const properties = new Map();
+  const classes = new Set();
+  const surface = { style: { setProperty: (name, value) => properties.set(name, value), removeProperty: (name) => properties.delete(name) } };
+  const card = { classList: { add: (value) => classes.add(value), remove: (value) => classes.delete(value) }, querySelector: () => surface, getBoundingClientRect: () => ({ left: 0, top: 0, width: 400, height: 200 }), contains: () => false };
+  grid.closest = () => card;
+  const pointer = (pointerType) => { const event = new Event('pointermove'); Object.assign(event, { pointerType, clientX: 360, clientY: 20 }); grid.dispatchEvent(event); };
+  const destroy = initCardInteractions({ document, window });
+  pointer('touch'); assert.equal(pending.size, 0);
+  pointer('mouse'); pointer('mouse'); assert.equal(pending.size, 1);
+  const callbacks = [...pending.values()]; pending.clear(); callbacks.forEach((callback) => callback());
+  assert.equal(properties.get('--tilt-x'), '1.60deg');
+  assert.equal(properties.get('--tilt-y'), '2.00deg');
+  assert.equal(properties.get('--glare-opacity'), '1');
+  grid.dispatchEvent(new Event('pointerout'));
+  assert.equal(properties.size, 0);
+  pointer('mouse'); reduced.matches = true; reduced.dispatchEvent(new Event('change'));
+  assert.equal(pending.size, 0);
+  assert.equal(classes.size, 0);
+  pointer('mouse'); assert.equal(pending.size, 0);
+  reduced.matches = false; pointer('mouse'); destroy();
+  assert.equal(pending.size, 0);
+  assert.equal(properties.size, 0);
 });

@@ -73,6 +73,7 @@ function fakePage(resolver, viewer = null) {
   const image = new Image();
   const status = { hidden: false, textContent: '' };
   const actions = { hidden: true };
+  const preview = { removed: false, remove() { this.removed = true; } };
   const dimensions = new Map();
   const glowClasses = new Set();
   const glowDraws = [];
@@ -80,7 +81,7 @@ function fakePage(resolver, viewer = null) {
   const frame = {
     dataset: { diskPath: '/Работа/01.png', diskMode: 'full', diskRevision: '1' },
     style: { setProperty: (key, value) => dimensions.set(key, value) },
-    querySelector: (selector) => ({ img: image, '.media-status': status, '.media-actions': actions })[selector],
+    querySelector: (selector) => ({ img: image, '.media-status': status, '.media-actions': actions, '.transition-preview': preview })[selector],
     closest: () => ({ querySelector: () => glow }),
   };
   const timers = new Set();
@@ -97,7 +98,7 @@ function fakePage(resolver, viewer = null) {
   };
   const document = { body: { style: { overflow: 'hidden' } }, querySelectorAll: (selector) => selector === '.remote-media' ? [frame] : [], querySelector: (selector) => selector === '#lightbox' ? viewer : null };
   const loader = mountMedia({ document, window, publicUrl: 'https://disk.yandex.ru/d/test', resolveMedia: resolver });
-  return { loader, image, status, actions, frame, dimensions, timers, glow, glowClasses, glowDraws, observer: (entries) => observer(entries) };
+  return { loader, image, status, actions, frame, dimensions, timers, glow, glowClasses, glowDraws, preview, observer: (entries) => observer(entries) };
 }
 
 test('visible media loads on demand, refreshes expired links, unloads outside the viewport and keeps its dimensions', async () => {
@@ -117,6 +118,7 @@ test('visible media loads on demand, refreshes expired links, unloads outside th
   page.observer([{ target: page.frame, isIntersecting: false }]);
   for (const timer of [...page.timers]) timer();
   assert.equal(page.image.src, undefined);
+  assert.equal(page.preview.removed, true, 'offscreen transition previews must be released with the original media');
   assert.equal(page.frame.dataset.state, 'idle');
   assert.equal(page.glowClasses.has('is-ready'), false);
   assert.equal(page.glow.width * page.glow.height, 0, 'offscreen glow releases its backing store');

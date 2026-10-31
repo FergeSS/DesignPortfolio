@@ -51,8 +51,11 @@ body[data-page='home'] .page-atmosphere > img { height: 100%; }
 .section-heading { display: flex; justify-content: space-between; align-items: center; min-height: 38px; margin-bottom: 24px; }
 .section-heading h2 { font-size: 28px; font-weight: 500; line-height: 38px; }
 .count, .caption { font-size: 13px; color: var(--muted); line-height: 1.5; }
-.grid { display: flex; flex-wrap: wrap; gap: 24px; align-items: stretch; }
-.card { position: relative; isolation: isolate; width: calc((100% - 24px) / 2); border-radius: var(--radius); padding: 10px 10px 14px; min-width: 0; transition: border-color .3s, box-shadow .3s; }
+.grid { display: flex; flex-wrap: wrap; gap: 24px; align-items: stretch; perspective: 1400px; }
+.card { position: relative; width: calc((100% - 24px) / 2); border-radius: var(--radius); min-width: 0; }
+.card-tilt { position: relative; isolation: isolate; height: 100%; border-radius: inherit; padding: 10px 10px 14px; transform: perspective(1100px) rotateX(var(--tilt-x,0deg)) rotateY(var(--tilt-y,0deg)); transition: transform .5s var(--ease), scale .3s var(--ease), border-color .3s, box-shadow .3s; }
+.card.is-tilting .card-tilt { transition-duration: .14s, .3s, .3s, .3s; will-change: transform; }
+.card-tilt::after { content: ''; position: absolute; inset: 0; z-index: 2; border-radius: inherit; background: radial-gradient(ellipse at var(--glare-x,50%) var(--glare-y,50%),#ffffff22,transparent 58%),linear-gradient(120deg,transparent 25%,#ffffff0a 48%,transparent 68%); box-shadow: inset 0 0 0 1px #ffffff12; opacity: var(--glare-opacity,0); pointer-events: none; transition: opacity .3s; }
 .card-glow { position: absolute; z-index: -1; inset: 6px; width: calc(100% - 12px); height: calc(100% - 12px); border-radius: inherit; filter: blur(32px) saturate(1.4); opacity: 0; pointer-events: none; transition: opacity .6s var(--ease); }
 .card-glow.is-ready { opacity: .32; }
 .card:hover .card-glow.is-ready, .card:focus-within .card-glow.is-ready { opacity: .44; }
@@ -63,7 +66,8 @@ body[data-page='home'] .page-atmosphere > img { height: 100%; }
 .card-caption { min-height: 42px; display: flex; align-items: center; justify-content: space-between; padding: 0 8px; gap: 16px; }
 .card-caption h2 { font-size: 16px; font-weight: 500; line-height: 1.5; overflow-wrap: anywhere; }
 .card-caption .icon { transition: transform .3s var(--ease); }
-.card:hover { border-color: #ffffff36; box-shadow: 0 20px 50px #00000052, inset 0 1px #ffffff26; }
+.card:hover .card-tilt, .card:focus-within .card-tilt { border-color: #ffffff36; box-shadow: 0 24px 60px #00000066, inset 0 1px #ffffff26; }
+.card.is-opening .card-tilt { scale: 1.015; }
 .card:hover .card-caption .icon { transform: translate(2px,-2px); }
 .placeholder { display: grid; place-items: center; color: var(--muted); font-size: 14px; }
 .filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
@@ -106,6 +110,12 @@ body[data-page='project'] .shell { padding-bottom: 48px; }
 .next-preview .cover { width: 156px; border-radius: 12px; }
 .remote-media .remote-image { opacity: 0; transition: opacity .4s; }
 .remote-media[data-state='loaded'] .remote-image { opacity: 1; }
+.transition-preview { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; transition: opacity .45s; }
+.has-transition-preview[data-state='loaded'] .transition-preview { opacity: 0; }
+.has-transition-preview .media-status { visibility: hidden; }
+.transition-target { visibility: hidden; }
+.work-transition { position: fixed; z-index: 100; overflow: hidden; background: #17171e; box-shadow: 0 24px 80px #00000055; pointer-events: none; }
+.work-transition-image { display: block; width: 100%; height: 100%; object-fit: contain; }
 .media-status { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--muted); font-size: 12px; pointer-events: none; }
 .media-actions { position: absolute; inset: auto 0 16px; display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 16px; padding: 8px; font-size: 12px; }
 .media-retry { border: 1px solid var(--line); border-radius: 24px; background: #17171e; padding: 10px 16px; }
@@ -131,7 +141,7 @@ dialog[open] { animation: viewer-enter .3s var(--ease); }
 .skip-link { position: fixed; top: -100px; left: 20px; color: var(--text); background: #25212c; padding: 14px; z-index: 200; }
 .skip-link:focus { top: 8px; }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.motion-ready [data-reveal] { opacity: 0; transform: translateY(18px); transition: opacity .7s var(--ease), transform .7s var(--ease), border-color .3s; }
+.motion-ready [data-reveal] { opacity: 0; transform: perspective(1100px) translate3d(0,48px,-60px) rotateX(6deg) rotateZ(var(--entry-angle,-.8deg)) scale(.95); transition: opacity .7s var(--ease) var(--entry-delay,0ms), transform .9s var(--ease) var(--entry-delay,0ms); }
 .motion-ready [data-reveal].is-visible { opacity: 1; transform: none; }
 @keyframes letter-f-levitate { 0%,100% { transform: translate(-.18%,.625%) rotate(-.25deg); } 50% { transform: translate(.09%,-1.25%) rotate(.3deg); } }
 @keyframes letter-d-levitate { 0%,100% { transform: translate(.18%,-.78%) rotate(.25deg); } 50% { transform: translate(-.09%,1.09%) rotate(-.3deg); } }
@@ -162,7 +172,8 @@ dialog[open] { animation: viewer-enter .3s var(--ease); }
   .section-heading { margin-bottom: 20px; }
   .section-heading h2 { font-size: 25px; }
   .grid { gap: 16px; }
-  .card { width: 100%; padding: 8px 8px 10px; }
+  .card { width: 100%; }
+  .card-tilt { padding: 8px 8px 10px; }
   .card-glow { filter: blur(24px) saturate(1.4); }
   .card-link { gap: 8px; }
   .cover { border-radius: 15px; }
@@ -192,9 +203,15 @@ dialog[open] { animation: viewer-enter .3s var(--ease); }
   .media-status { font-size: 10px; padding: 12px; }
   .media-actions { position: relative; inset: auto; background: #17171e; }
 }
+@media (hover: none), (pointer: coarse) {
+  .card:active .card-tilt { scale: .985; }
+  .card:active .card-glow.is-ready { opacity: .44; }
+}
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
   .hero-letter { will-change: auto; }
   .motion-ready [data-reveal] { opacity: 1; transform: none; }
+  .card-tilt, .card:active .card-tilt, .card.is-opening .card-tilt { transform: none; scale: 1; }
+  .card-tilt::after { display: none; }
 }
