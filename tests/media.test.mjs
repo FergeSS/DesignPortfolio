@@ -115,6 +115,7 @@ test('visible media loads on demand, refreshes expired links, unloads outside th
   assert.equal(page.glow.width * page.glow.height, 1536, 'glow retains only a tiny copy of the preview');
   assert.equal(page.glowDraws[0][0], page.image, 'glow reuses the loaded image without another media request');
   assert.equal(page.dimensions.get('--media-ratio'), '1200 / 800');
+  assert.equal(page.dimensions.get('--media-width'), '1200px', 'gallery scaling must retain the intrinsic width to avoid enlargement');
   page.observer([{ target: page.frame, isIntersecting: false }]);
   for (const timer of [...page.timers]) timer();
   assert.equal(page.image.src, undefined);

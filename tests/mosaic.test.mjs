@@ -12,4 +12,7 @@ test('cover mosaic preserves ratios, fills each row and aligns the outside perim
   assert.ok(heights.every((h) => Math.abs(h - heights[0]) < .001));
   assert.deepEqual(mosaicWidths(ratios, 350, 16), ratios.map(() => 350));
   assert.deepEqual(mosaicWidths([], 1280), []);
+  const posterRow = mosaicWidths([.75, 2.5], 1280);
+  assert.ok(Math.abs(posterRow[0] + posterRow[1] + 24 - 1280) < .001);
+  assert.ok(Math.abs((posterRow[0] - 22) / .75 - (posterRow[1] - 22) / 2.5) < .001, 'a portrait and a wide cover share a row without stretching the poster');
 });

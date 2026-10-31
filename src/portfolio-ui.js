@@ -11,7 +11,11 @@ export function mosaicWidths(ratios, width, gap = 24) {
   }
   for (const value of ratios) {
     const ratio = Number.isFinite(value) && value > 0 ? value : 16 / 9;
-    if (ratio >= 2.2) { flush(); result.push(width); continue; }
+    if (ratio >= 2.2) {
+      if (row.length === 1 && row[0] < 1) { row.push(ratio); flush(); }
+      else { flush(); result.push(width); }
+      continue;
+    }
     row.push(ratio);
     const height = (width - gap * (row.length - 1) - 22 * row.length) / row.reduce((sum, r) => sum + r, 0);
     if ((row.length >= 2 && height <= 420) || row.length >= 3) flush();
@@ -29,6 +33,26 @@ export function initPortfolioUI({ document, window }) {
   document.addEventListener('click', closeContact);
   document.addEventListener('keydown', escapeContact);
   const cleanups = [() => document.removeEventListener('click', closeContact), () => document.removeEventListener('keydown', escapeContact)];
+  const gallery = document.querySelector('.gallery');
+  if (gallery) {
+    const controls = document.querySelector('.gallery-controls');
+    const heading = document.querySelector('.project-heading');
+    let request;
+    const fit = () => {
+      request = undefined;
+      const top = gallery.getBoundingClientRect().top + window.scrollY;
+      const controlsHeight = controls ? controls.getBoundingClientRect().height + parseFloat(window.getComputedStyle(controls).marginTop) : 0;
+      const height = Math.max(160, window.innerHeight - top - controlsHeight - 24);
+      gallery.style.setProperty('--gallery-height', `${height.toFixed(2)}px`);
+    };
+    const schedule = () => { if (request === undefined) request = window.requestAnimationFrame(fit); };
+    const resize = new window.ResizeObserver(schedule);
+    if (heading) resize.observe(heading);
+    if (controls) resize.observe(controls);
+    window.addEventListener('resize', schedule);
+    fit();
+    cleanups.push(() => { resize.disconnect(); window.removeEventListener('resize', schedule); if (request !== undefined) window.cancelAnimationFrame(request); gallery.style.removeProperty('--gallery-height'); });
+  }
   const grid = document.querySelector('.grid');
   if (grid) {
     const cards = [...grid.querySelectorAll('.card')];

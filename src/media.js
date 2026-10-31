@@ -124,6 +124,7 @@ export function mountMedia({ document, window, publicUrl, resolveMedia = createM
       if (image.naturalWidth && image.naturalHeight) {
         const ratio = `${image.naturalWidth} / ${image.naturalHeight}`;
         frame.style.setProperty('--media-ratio', ratio);
+        frame.style.setProperty('--media-width', `${image.naturalWidth}px`);
         try { window.localStorage?.setItem(ratioKey(frame), ratio); } catch { /* Optional layout cache. */ }
         if (window.CustomEvent) frame.dispatchEvent(new window.CustomEvent('mediaready', { bubbles: true }));
       }
