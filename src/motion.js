@@ -68,30 +68,39 @@ export function initMotion({ document, window }) {
   const root = document.documentElement;
   const destroyHeroScroll = initHeroScroll({ document, window, reduced });
   let observer;
+  let resetObserver;
   const elements = [...document.querySelectorAll('[data-reveal]')];
-  elements.forEach((element, i) => element.style.setProperty('--entry-angle', `${i % 2 ? .8 : -.8}deg`));
   function reveal() {
-    if (reduced.matches || !window.IntersectionObserver) return;
+    if (reduced.matches || !window.IntersectionObserver || !elements.length) return;
     observer = new window.IntersectionObserver((entries) => {
       const entering = entries.filter((entry) => entry.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top || a.boundingClientRect.left - b.boundingClientRect.left);
       entering.forEach((entry, index) => {
-        entry.target.style.setProperty('--entry-delay', `${Math.min(index, 3) * 80}ms`);
+        if (entry.target.classList.contains('is-visible')) return;
+        entry.target.style.setProperty('--entry-delay', `${Math.min(index, 3) * 110}ms`);
         entry.target.classList.add('is-visible');
-        observer.unobserve(entry.target);
       });
-    }, { threshold: .08 });
+    }, { threshold: 0, rootMargin: '0px 0px -48px 0px' });
+    // Rearm only well outside the viewport, so reversing a small scroll never flickers.
+    resetObserver = new window.IntersectionObserver((entries) => {
+      for (const entry of entries) if (!entry.isIntersecting) entry.target.classList.remove('is-visible');
+    }, { threshold: 0, rootMargin: '160px 0px' });
     root.classList.add('motion-ready');
-    for (const element of elements) if (!element.classList.contains('is-visible')) observer.observe(element);
+    for (const element of elements) { observer.observe(element); resetObserver.observe(element); }
   }
   reveal();
   const resetMotion = () => {
     observer?.disconnect();
+    resetObserver?.disconnect();
     root.classList.remove('motion-ready');
     if (reduced.matches) elements.forEach((element) => element.classList.add('is-visible'));
     else reveal();
   };
   reduced.addEventListener('change', resetMotion);
-  return () => { destroyHeroScroll(); reduced.removeEventListener('change', resetMotion); observer?.disconnect(); root.classList.remove('motion-ready'); };
+  return () => {
+    destroyHeroScroll(); reduced.removeEventListener('change', resetMotion);
+    observer?.disconnect(); resetObserver?.disconnect(); root.classList.remove('motion-ready');
+    elements.forEach((element) => element.style.removeProperty('--entry-delay'));
+  };
 }
 
 export function initCardInteractions({ document, window }) {
@@ -106,9 +115,8 @@ export function initCardInteractions({ document, window }) {
     if (request !== undefined) window.cancelAnimationFrame(request);
     request = undefined;
     if (!active) return;
-    active.classList.remove('is-tilting');
-    const surface = active.querySelector('.card-tilt');
-    for (const name of ['--tilt-x', '--tilt-y', '--glare-x', '--glare-y', '--glare-opacity']) surface?.style.removeProperty(name);
+    const surface = active.querySelector('.card-surface');
+    for (const name of ['--glare-x', '--glare-y', '--glare-opacity']) surface?.style.removeProperty(name);
     active = undefined;
   }
   function paint() {
@@ -117,10 +125,8 @@ export function initCardInteractions({ document, window }) {
     const bounds = active.getBoundingClientRect();
     const x = Math.min(1, Math.max(0, (pointer.x - bounds.left) / bounds.width));
     const y = Math.min(1, Math.max(0, (pointer.y - bounds.top) / bounds.height));
-    const surface = active.querySelector('.card-tilt');
+    const surface = active.querySelector('.card-surface');
     if (!surface) return;
-    surface.style.setProperty('--tilt-x', `${((.5 - y) * 4).toFixed(2)}deg`);
-    surface.style.setProperty('--tilt-y', `${((x - .5) * 5).toFixed(2)}deg`);
     surface.style.setProperty('--glare-x', `${(x * 100).toFixed(1)}%`);
     surface.style.setProperty('--glare-y', `${(y * 100).toFixed(1)}%`);
     surface.style.setProperty('--glare-opacity', '1');
@@ -129,7 +135,7 @@ export function initCardInteractions({ document, window }) {
     if (reduced.matches || !hover.matches || event.pointerType !== 'mouse') return;
     const card = event.target.closest('.card');
     if (!card) return;
-    if (card !== active) { reset(); active = card; active.classList.add('is-tilting'); }
+    if (card !== active) { reset(); active = card; }
     pointer = { x: event.clientX, y: event.clientY };
     if (request === undefined) request = window.requestAnimationFrame(paint);
   }
