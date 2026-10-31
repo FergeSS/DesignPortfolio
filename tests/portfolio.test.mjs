@@ -71,7 +71,8 @@ test('end-to-end: paginated catalog, Unicode paths and static pages without down
   const project = await readFile(resolve(root, 'dist/projects/ezh/index.html'), 'utf8');
   assert.ok(project.includes('Первый абзац.</p><p>Второй абзац.'));
   assert.ok(project.includes('data-disk-path="/Кофейня/02.png"'));
-  assert.ok(home.includes('data-disk-mode="preview"'));
+  assert.ok(home.includes('data-disk-mode="full"'), 'portfolio cards must load originals');
+  assert.ok(!home.includes('data-disk-mode="preview"'), 'large covers must never request reduced previews');
   assert.ok(home.includes('referrerpolicy="no-referrer"'), 'Yandex media rejects a foreign Referer header');
   assert.ok(project.includes('data-disk-mode="full"'));
   assert.ok(!project.includes('<img class="remote-image" src='), 'portfolio images must resolve from Disk only when visible');
