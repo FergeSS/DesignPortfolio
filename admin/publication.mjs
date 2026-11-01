@@ -29,7 +29,10 @@ export class Publication {
       if (this.service.writer) {
         await this.service.writable();
         const projects = await this.service.projects();
-        if (projects.some((project) => project.problem)) throw new AdminError('Исправь предупреждения в описаниях работ перед публикацией.');
+        const unavailable = projects.find((project) => project.metadataUnavailable);
+        if (unavailable) throw new AdminError(`Не удалось загрузить описание работы «${unavailable.folder}» с Диска. Нажми «Обновить» и повтори публикацию.`, 502);
+        const invalid = projects.find((project) => project.problem);
+        if (invalid) throw new AdminError(`Проверь описание работы «${invalid.folder}»: ${invalid.problem}`);
       }
       try { before = new Set((await this.runs()).map((run) => run.databaseId)); }
       catch { throw new AdminError('Нет доступа к GitHub. Выполни gh auth login в терминале и повтори публикацию.', 502); }

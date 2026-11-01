@@ -64,12 +64,38 @@ export class WritableDisk {
     }
   }
   async download(path, maxBytes = 1024 * 1024) {
-    const { href } = await this.request('/resources/download', { path });
-    const response = await this.fetch(trustedUrl(href), { redirect: 'error', signal: AbortSignal.timeout(30000) });
-    if (!response.ok) throw new AdminError('Не удалось прочитать описание.', 502);
-    const chunks = []; let size = 0;
-    for await (const chunk of response.body) { size += chunk.length; if (size > maxBytes) throw new AdminError('Описание превышает 1 МБ.'); chunks.push(chunk); }
-    return Buffer.concat(chunks);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const { href } = await this.request('/resources/download', { path });
+        let url = trustedUrl(href);
+        for (let redirects = 0; redirects <= 5; redirects++) {
+          // Signed download links redirect to Yandex storage. OAuth stays on the API host.
+          const response = await this.fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(30000) });
+          if ([301, 302, 303, 307, 308].includes(response.status)) {
+            await response.body?.cancel();
+            const location = response.headers.get('location');
+            if (!location || redirects === 5) throw new AdminError('Не удалось открыть ссылку на описание. Обнови список.', 502);
+            url = trustedUrl(new URL(location, url).href);
+            continue;
+          }
+          if (!response.ok) {
+            await response.body?.cancel();
+            throw new AdminError('Не удалось скачать описание с Диска. Обнови список и повтори попытку.', response.status);
+          }
+          if (Number(response.headers.get('content-length')) > maxBytes) {
+            await response.body?.cancel();
+            throw new AdminError('Описание превышает 1 МБ.');
+          }
+          const chunks = []; let size = 0;
+          for await (const chunk of response.body) { size += chunk.length; if (size > maxBytes) throw new AdminError('Описание превышает 1 МБ.'); chunks.push(chunk); }
+          return Buffer.concat(chunks);
+        }
+      } catch (error) {
+        if (error instanceof AdminError && error.status !== 429 && error.status < 500) throw error;
+        if (attempt === 2) throw new AdminError('Не удалось загрузить описание с Диска. Проверь соединение и нажми «Обновить». Исходный файл не изменён.', 502);
+        await this.sleep(500 * (attempt + 1));
+      }
+    }
   }
   async upload(path, bytes, overwrite = false) {
     const { href } = await this.request('/resources/upload', { path, overwrite });

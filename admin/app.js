@@ -15,8 +15,9 @@ async function api(path, { method = 'GET', data, bytes } = {}) {
   return result;
 }
 function locks() {
-  const locked = !state.connected || state.busy || state.publication.active;
-  $('#new-project').disabled = locked;
+  const globallyLocked = !state.connected || state.busy || state.publication.active;
+  const locked = globallyLocked || Boolean(state.current?.metadataUnavailable);
+  $('#new-project').disabled = globallyLocked;
   $('#save').disabled = locked || !state.current || !state.dirty;
   $('#delete-project').disabled = locked || !state.current;
   $('#publish').disabled = state.busy || state.publication.active;
@@ -24,7 +25,7 @@ function locks() {
   for (const field of form.elements) { if (field.type === 'checkbox') field.disabled = locked; else field.readOnly = locked; }
   document.querySelectorAll('[data-write]').forEach((button) => { button.disabled = locked; });
   $('#dropzone').classList.toggle('disabled', locked); $('#dropzone').setAttribute('aria-disabled', String(locked));
-  $('#save-status').textContent = !state.connected ? 'Подключи Диск, чтобы редактировать работу.' : state.dirty ? 'Есть несохранённые изменения.' : 'Изменения сохранены на Диске. Для публикации нажми «Обновить сайт».';
+  $('#save-status').textContent = state.current?.metadataUnavailable ? 'Описание не загружено. Нажми «Обновить», чтобы повторить чтение с Диска.' : !state.connected ? 'Подключи Диск, чтобы редактировать работу.' : state.dirty ? 'Есть несохранённые изменения.' : 'Изменения сохранены на Диске. Для публикации нажми «Обновить сайт».';
 }
 async function perform(task) {
   if (state.busy) return;
@@ -51,7 +52,7 @@ function renderList() {
     const cover = project.images.find((image) => image.name === project.cover);
     if (cover) { const image = document.createElement('img'); image.src = cover.thumbnail; image.alt = ''; image.loading = 'lazy'; image.referrerPolicy = 'no-referrer'; button.append(image); }
     const copy = document.createElement('span'), title = document.createElement('strong'), meta = document.createElement('small');
-    title.textContent = project.title; meta.textContent = `${project.published ? 'На сайте' : 'Скрыто'} · ${project.images.length} изобр.${project.problem ? ' · ⚠' : ''}`;
+    title.textContent = project.title; meta.textContent = `${project.metadataUnavailable ? 'Описание не загружено' : project.published ? 'На сайте' : 'Скрыто'} · ${project.images.length} изобр.${project.problem ? ' · ⚠' : ''}`;
     copy.append(title, meta); button.append(copy); button.addEventListener('click', () => {
       if (state.busy || (state.dirty && !confirm('Есть несохранённые изменения. Перейти к другой работе без сохранения?'))) return;
       setProject(project);

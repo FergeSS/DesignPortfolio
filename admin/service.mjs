@@ -89,15 +89,24 @@ export class AdminService {
     const { items } = await disk.list(path);
     const files = items.filter((item) => item.type === 'file');
     const infos = files.filter((item) => /^info\.(txt|docx)$/i.test(item.name));
-    let metadata = parseInfo('', folder); let problem = '';
-    try {
-      if (infos[0]) metadata = parseInfo(decodeInfo(await disk.download(child(path, infos[0].name), 1024 * 1024), infos[0].name), folder);
-      if (infos.length > 1) problem = 'Найдено несколько описаний. При сохранении останется один info.txt, предыдущие копии будут сохранены локально.';
-    } catch (error) { problem = `Описание требует исправления: ${error.message}`; }
+    let metadata = parseInfo('', folder); let problem = ''; let metadataUnavailable = false;
+    if (infos[0]) {
+      let bytes;
+      try { bytes = await disk.download(child(path, infos[0].name), 1024 * 1024); }
+      catch {
+        metadataUnavailable = true;
+        problem = 'Не удалось загрузить описание с Диска. Нажми «Обновить», чтобы повторить. Редактирование временно отключено; исходный файл не изменён.';
+      }
+      if (bytes) {
+        try { metadata = parseInfo(decodeInfo(bytes, infos[0].name), folder); }
+        catch (error) { problem = `Описание требует исправления: ${error.message}`; }
+      }
+    }
+    if (!problem && infos.length > 1) problem = 'Найдено несколько описаний. При сохранении останется один info.txt, предыдущие копии будут сохранены локально.';
     const slug = metadata.slug || defaultSlug(child(this.config.sourcePath || '/', folder));
     const images = files.filter((item) => imagePattern.test(item.name) && !item.name.startsWith('.')).sort((a, b) => natural(a.name, b.name)).map((item) => ({ name: item.name, size: item.size || 0, revision: String(item.md5 || item.modified || ''), thumbnail: '/api/thumbnail?' + new URLSearchParams({ folder, name: item.name, revision: String(item.md5 || item.modified || '') }) }));
     const cover = images.find((item) => /^cover\./i.test(item.name))?.name || images[0]?.name || '';
-    return { ...metadata, slug, folder, images, cover, problem, version: revision(files), hasInfo: Boolean(infos.length) };
+    return { ...metadata, slug, folder, images, cover, problem, metadataUnavailable, version: metadataUnavailable ? null : revision(files), hasInfo: Boolean(infos.length) };
   }
   async projects() {
     const context = this.context();
@@ -110,13 +119,16 @@ export class AdminService {
   async current(folder, expected) {
     await this.writable();
     const project = await this.project(folder);
+    if (project.metadataUnavailable) throw new AdminError('Описание работы не загружено с Диска. Нажми «Обновить» перед внесением изменений.', 502);
     if (!expected || project.version !== expected) throw new AdminError('Работа изменилась на Диске. Обнови её перед сохранением, чтобы не затереть изменения.', 409);
     return project;
   }
   async uniqueSlug(text, folder) {
     const metadata = parseInfo(text, folder);
     const slug = metadata.slug || defaultSlug(child(this.config.sourcePath || '/', folder));
-    if ((await this.projects()).some((item) => item.folder !== folder && item.slug === slug)) throw new AdminError('Этот адрес уже используется другой работой.', 409);
+    const projects = await this.projects();
+    if (projects.some((item) => item.metadataUnavailable)) throw new AdminError('Не удалось проверить адреса работ: часть описаний не загружена с Диска. Обнови список и повтори попытку.', 502);
+    if (projects.some((item) => item.folder !== folder && item.slug === slug)) throw new AdminError('Этот адрес уже используется другой работой.', 409);
   }
   async create({ folder, metadata }) {
     this.allowedFolder(folder);

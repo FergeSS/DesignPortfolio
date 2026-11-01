@@ -78,6 +78,32 @@ test('connected admin resolves browser previews through the public API and cache
   await app.service.thumbnail('Постер', 'cover.png', 'two'); assert.equal(calls, 2);
 });
 
+test('failed description downloads lock edits and cannot overwrite metadata after the connection recovers', async (t) => {
+  const app = await setup(t); await app.connect();
+  const original = Buffer.from(app.disk.files.get(ROOT + '/Постер/info.txt'));
+  const download = app.disk.download.bind(app.disk);
+  app.disk.download = async () => { throw new TypeError('fetch failed'); };
+  const failed = await app.service.project('Постер');
+  assert.equal(failed.metadataUnavailable, true); assert.equal(failed.version, null);
+  assert.match(failed.problem, /Не удалось загрузить/); assert.doesNotMatch(failed.problem, /требует исправления|fetch failed/);
+  await assert.rejects(app.service.save({ folder: 'Постер', version: 'old', metadata: meta('Пустая замена') }), /не загружено/);
+  app.disk.download = download;
+  await assert.rejects(app.service.save({ folder: 'Постер', version: failed.version, metadata: meta('Пустая замена') }), /изменилась/);
+  assert.deepEqual(app.disk.files.get(ROOT + '/Постер/info.txt'), original);
+  const recovered = await app.service.project('Постер');
+  assert.equal(recovered.metadataUnavailable, false); assert.equal(recovered.problem, ''); assert.equal(recovered.description, meta().description);
+  assert.ok(recovered.version);
+});
+
+test('malformed downloaded metadata remains distinguishable from a network failure and can be repaired', async (t) => {
+  const app = await setup(t); await app.connect();
+  app.disk.files.set(ROOT + '/Постер/info.txt', Buffer.from([0xff, 0xfe, 0xff]));
+  const project = await app.service.project('Постер');
+  assert.equal(project.metadataUnavailable, false); assert.match(project.problem, /требует исправления/); assert.ok(project.version);
+  const fixed = await app.service.save({ folder: 'Постер', version: project.version, metadata: meta('Исправлено') });
+  assert.equal(fixed.problem, ''); assert.equal(fixed.title, 'Исправлено');
+});
+
 test('legacy descriptions migrate to one TXT, and failed uploads restore the legacy file', async (t) => {
   const app = await setup(t); await app.connect();
   const bytes = app.disk.files.get(ROOT + '/Постер/info.txt');
@@ -141,6 +167,40 @@ test('authenticated Disk calls keep OAuth on the API host, follow operations saf
   assert.equal(calls[3].url.hostname, 'cloud-api.yandex.net');
   const unsafe = new WritableDisk('token', { fetchImpl: async () => Response.json({ href: 'https://attacker.example/upload' }) });
   await assert.rejects(unsafe.upload(ROOT + '/x.png', png), /неподходящую ссылку/);
+});
+
+test('description downloads follow Yandex storage redirects without forwarding OAuth and retry transient failures', async () => {
+  const calls = []; let requests = 0, storage = 0;
+  const disk = new WritableDisk('private-token', { sleep: async () => {}, fetchImpl: async (input, options) => {
+    const url = new URL(input); calls.push({ url, options });
+    if (url.hostname === 'cloud-api.yandex.net') { requests++; return Response.json({ href: 'https://downloader.disk.yandex.ru/signed-description' }); }
+    assert.equal(options.headers, undefined); assert.equal(options.redirect, 'manual');
+    if (url.hostname === 'downloader.disk.yandex.ru') return new Response(null, { status: 302, headers: { Location: 'https://mds.storage.yandex.net/description' } });
+    if (storage++ === 0) throw new TypeError('fetch failed');
+    return new Response('Название: СДС\nОписание:\nТекст с Диска');
+  } });
+  assert.match((await disk.download(ROOT + '/СДС/info.txt')).toString('utf8'), /Текст с Диска/);
+  assert.equal(requests, 2, 'a retry resolves a fresh signed URL');
+  assert.ok(calls.filter((call) => call.options.headers).every((call) => call.url.hostname === 'cloud-api.yandex.net'));
+  const blocked = new WritableDisk('private-token', { sleep: async () => {}, fetchImpl: async (input) => {
+    const url = new URL(input); assert.notEqual(url.hostname, 'attacker.example');
+    return url.hostname === 'cloud-api.yandex.net' ? Response.json({ href: 'https://downloader.disk.yandex.ru/file' }) : new Response(null, { status: 302, headers: { Location: 'https://attacker.example/file' } });
+  } });
+  await assert.rejects(blocked.download(ROOT + '/x/info.txt'), /Не удалось загрузить описание/);
+  let largeRequests = 0;
+  const large = new WritableDisk('private-token', { sleep: async () => {}, fetchImpl: async (input) => {
+    largeRequests++; return new URL(input).hostname === 'cloud-api.yandex.net' ? Response.json({ href: 'https://downloader.disk.yandex.ru/file' }) : new Response('abc', { headers: { 'Content-Length': '1000' } });
+  } });
+  await assert.rejects(large.download(ROOT + '/x/info.txt', 2), /превышает/); assert.equal(largeRequests, 2);
+});
+
+test('publication reports unreadable descriptions as a connection error without dispatching a workflow', async () => {
+  let dispatched = false;
+  const service = { writer: true, exclusive: async (task) => task(), writable: async () => {}, projects: async () => [{ folder: 'СДС', metadataUnavailable: true, problem: 'Сбой чтения' }] };
+  const publication = new Publication({ root: '.', service, run: async () => { dispatched = true; }, refresh: async () => {} });
+  publication.start(); await publication.pending;
+  assert.equal(dispatched, false); assert.equal(publication.state.status, 'error');
+  assert.match(publication.state.message, /Не удалось загрузить описание работы «СДС»/); assert.doesNotMatch(publication.state.message, /Исправь/);
 });
 
 test('HTTP admin rejects forged origins and paths, limits uploads and never serves secret files', async (t) => {
