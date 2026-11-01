@@ -178,14 +178,23 @@ export function mountMedia({ document, window, publicUrl, resolveMedia = createM
   const viewer = document.querySelector('#lightbox');
   const gallery = [...document.querySelectorAll('.gallery-frame')];
   const thumbnails = [...document.querySelectorAll('[data-select-image]')];
+  const thumbnailStrip = document.querySelector('.thumbnails');
+  const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)');
   let selected = 0;
   let viewerController;
+  let selectionAnimation;
   const pad = (n) => String(n).padStart(2, '0');
   const count = () => `${pad(selected + 1)} / ${pad(gallery.length)}`;
   const dimensions = (frame) => {
     const image = frame?.querySelector('img');
     return image?.naturalWidth && image?.naturalHeight ? `${image.naturalWidth} × ${image.naturalHeight}` : '—';
   };
+  function centerThumbnail(behavior = 'smooth') {
+    const active = thumbnails[selected];
+    if (!thumbnailStrip || !active) return;
+    const left = Math.max(0, Math.min(thumbnailStrip.scrollWidth - thumbnailStrip.clientWidth, active.offsetLeft + active.offsetWidth / 2 - thumbnailStrip.clientWidth / 2));
+    thumbnailStrip.scrollTo({ left, behavior: reduced?.matches ? 'instant' : behavior });
+  }
   function updateInformation() {
     const frame = gallery[selected];
     if (!frame) return;
@@ -194,28 +203,45 @@ export function mountMedia({ document, window, publicUrl, resolveMedia = createM
     for (const node of document.querySelectorAll('[data-image-format]')) node.textContent = frame.dataset.format;
     for (const node of document.querySelectorAll('[data-image-summary]')) node.textContent = `${dimensions(frame)} · ${frame.dataset.format}`;
     const thumb = thumbnails[selected]?.querySelector('.remote-media');
-    if (thumb) thumb.style.setProperty('--media-ratio', frame.style.getPropertyValue('--media-ratio'));
+    const ratio = frame.style.getPropertyValue('--media-ratio');
+    if (thumb && ratio) thumb.style.setProperty('--media-ratio', ratio);
   }
   function select(index) {
     if (!gallery.length) return;
     const previous = gallery[selected];
+    const direction = index < selected ? -1 : 1;
     selected = (index + gallery.length) % gallery.length;
+    const previewRatio = thumbnails[selected]?.querySelector('.remote-media')?.style.getPropertyValue('--media-ratio');
+    if (previewRatio && !gallery[selected].style.getPropertyValue('--media-ratio')) gallery[selected].style.setProperty('--media-ratio', previewRatio);
+    selectionAnimation?.cancel();
     gallery.forEach((frame, i) => { frame.hidden = i !== selected; });
     thumbnails.forEach((button, i) => { button.classList.toggle('selected', i === selected); button.setAttribute('aria-pressed', String(i === selected)); });
     if (previous !== gallery[selected]) { visible.delete(previous); release(previous); }
+    if (previous !== gallery[selected] && !reduced?.matches && !viewer?.open) selectionAnimation = gallery[selected].animate?.([{ opacity: 0, transform: `translateX(${direction * 18}px)` }, { opacity: 1, transform: 'none' }], { duration: 380, easing: 'cubic-bezier(.22,1,.36,1)' });
     visible.add(gallery[selected]);
     void show(gallery[selected]);
     updateInformation();
+    centerThumbnail();
   }
   gallery.forEach((frame, index) => {
     frame.setAttribute('role', 'button');
     frame.setAttribute('tabindex', '0');
     frame.setAttribute('aria-label', `На весь экран: ${frame.dataset.name}`);
-    frame.addEventListener('mediaready', updateInformation);
+    frame.addEventListener('mediaready', () => { updateInformation(); if (index === selected) centerThumbnail(); });
     frame.addEventListener('click', (event) => { if (event.target.closest('button,a')) return; selected = index; void openViewer(); });
     frame.addEventListener('keydown', (event) => { if (event.target === frame && ['Enter', ' '].includes(event.key)) { event.preventDefault(); selected = index; void openViewer(); } });
   });
   thumbnails.forEach((button, index) => button.addEventListener('click', () => select(index)));
+  document.querySelectorAll('[data-gallery-step]').forEach((button) => button.addEventListener('click', () => select(selected + Number(button.dataset.galleryStep))));
+  const onGalleryKey = (event) => {
+    if (viewer?.open || gallery.length < 2 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || !['ArrowLeft', 'ArrowRight'].includes(event.key) || !event.target.closest?.('.gallery, .gallery-controls')) return;
+    event.preventDefault(); select(selected + (event.key === 'ArrowLeft' ? -1 : 1));
+    if (thumbnails.includes(event.target)) thumbnails[selected]?.focus({ preventScroll: true });
+    else if (gallery.includes(event.target)) gallery[selected].focus({ preventScroll: true });
+  };
+  const onGalleryResize = () => centerThumbnail('instant');
+  document.addEventListener('keydown', onGalleryKey);
+  window.addEventListener('resize', onGalleryResize);
   document.querySelector('.expand-viewer')?.addEventListener('click', () => { void openViewer(); });
   async function openViewer() {
     const frame = gallery[selected];
@@ -276,5 +302,5 @@ export function mountMedia({ document, window, publicUrl, resolveMedia = createM
   const restore = () => { for (const frame of visible) void show(frame); };
   window.addEventListener('pagehide', hide);
   window.addEventListener('pageshow', restore);
-  return { show, release, destroy() { hide(); observer?.disconnect(); window.removeEventListener('pagehide', hide); window.removeEventListener('pageshow', restore); } };
+  return { show, release, destroy() { selectionAnimation?.cancel(); hide(); observer?.disconnect(); document.removeEventListener('keydown', onGalleryKey); window.removeEventListener('resize', onGalleryResize); window.removeEventListener('pagehide', hide); window.removeEventListener('pageshow', restore); } };
 }
