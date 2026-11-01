@@ -7,7 +7,9 @@ async function api(path, { method = 'GET', data, bytes } = {}) {
   const headers = {};
   if (method !== 'GET') headers['X-Admin-Key'] = state.key;
   if (data !== undefined) headers['Content-Type'] = 'application/json';
-  const response = await fetch(path, { method, headers, body: bytes || (data === undefined ? undefined : JSON.stringify(data)), cache: 'no-store' });
+  let response;
+  try { response = await fetch(path, { method, headers, body: bytes || (data === undefined ? undefined : JSON.stringify(data)), cache: 'no-store' }); }
+  catch { throw new Error('Нет соединения с локальной админкой. Открой файл «Админка.command» в папке проекта или выполни npm run admin. Окно Терминала должно оставаться открытым.'); }
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || 'Не удалось выполнить запрос.');
   return result;
