@@ -5,6 +5,21 @@ export const imagePattern = /\.(jpe?g|png|webp|gif|avif)$/i;
 export const natural = (a, b) => a.localeCompare(b, 'ru', { numeric: true });
 export const hash = (value) => createHash('sha256').update(value).digest('hex');
 
+export function validateImageOrder(value) {
+  if (!Array.isArray(value) || value.length > 2000 || value.some((name) => typeof name !== 'string' || !imagePattern.test(name) || name.length > 255 || name.startsWith('.') || /[\\/\u0000-\u001f\u007f]/.test(name)) || new Set(value).size !== value.length) throw new Error('Порядок изображений — список уникальных имён файлов изображений.');
+  return value;
+}
+
+export function sortImages(images, order = []) {
+  const positions = new Map(order.map((name, index) => [name, index]));
+  return [...images].sort((a, b) => (positions.get(a.name) ?? Infinity) - (positions.get(b.name) ?? Infinity) || natural(a.name, b.name));
+}
+
+export function galleryImages(images, order = [], cover) {
+  const sorted = sortImages(images, order);
+  return order.length ? sorted : sorted.sort((a, b) => Number(b.name === cover) - Number(a.name === cover));
+}
+
 export function decodeInfo(bytes, file, warnings = []) {
   if (bytes.subarray(0, 6).toString('ascii').startsWith('{\\rtf')) {
     throw new Error(`${file}: это RTF. Сохраните обычный TXT в UTF-8 или документ DOCX.`);
@@ -23,11 +38,11 @@ export function decodeInfo(bytes, file, warnings = []) {
 }
 
 export function parseInfo(text, folder) {
-  const result = { title: folder, category: '', year: '', order: 9999, description: '', slug: '', published: true };
-  const keys = { название: 'title', категория: 'category', год: 'year', порядок: 'order', адрес: 'slug', slug: 'slug', публиковать: 'published' };
+  const result = { title: folder, category: '', year: '', order: 9999, description: '', slug: '', published: true, imageOrder: [] };
+  const keys = { название: 'title', категория: 'category', год: 'year', порядок: 'order', адрес: 'slug', slug: 'slug', публиковать: 'published', 'порядок изображений': 'imageOrder' };
   const seen = new Set();
   const lines = text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').split('\n');
-  if (!lines.some((line) => /^(название|категория|год|порядок|адрес|slug|публиковать|описание)\s*:/i.test(line.trim()))) {
+  if (!lines.some((line) => /^(название|категория|год|порядок|адрес|slug|публиковать|описание|порядок изображений)\s*:/i.test(line.trim()))) {
     result.description = lines.join('\n').trim();
     return result;
   }
@@ -46,6 +61,10 @@ export function parseInfo(text, folder) {
     result[key] = pair[2].trim();
   }
   if (!result.title) throw new Error(`${folder}/info.txt: пустое название.`);
+  if (typeof result.imageOrder === 'string') {
+    try { result.imageOrder = validateImageOrder(JSON.parse(result.imageOrder)); }
+    catch { throw new Error(`${folder}/info.txt: «Порядок изображений» — JSON-массив уникальных имён изображений.`); }
+  }
   if (!/^-?\d+$/.test(String(result.order)) || !Number.isSafeInteger(Number(result.order))) throw new Error(`${folder}/info.txt: «Порядок» должен быть целым числом.`);
   result.order = Number(result.order);
   if (result.slug && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(result.slug)) throw new Error(`${folder}/info.txt: «Адрес» — латинские буквы в нижнем регистре, цифры и дефисы.`);

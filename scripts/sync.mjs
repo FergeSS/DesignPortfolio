@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile, rename } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { YandexDisk } from './yandex.mjs';
-import { decodeInfo, parseInfo, defaultSlug, imagePattern, natural } from './content.mjs';
+import { decodeInfo, parseInfo, defaultSlug, imagePattern, natural, sortImages } from './content.mjs';
 
 export async function syncPortfolio({ root = process.cwd(), disk, now = new Date() } = {}) {
   const config = JSON.parse(await readFile(resolve(root, 'portfolio.config.json'), 'utf8'));
@@ -41,7 +41,7 @@ export async function syncPortfolio({ root = process.cwd(), disk, now = new Date
     if (covers.length > 1) throw new Error(`${folder.name}: оставьте только один файл cover.`);
     if (!images.length) warnings.push(`${folder.name}: пока нет изображений.`);
     else if (!covers.length) warnings.push(`${folder.name}: нет cover, обложкой будет первое изображение.`);
-    projects.push({ ...metadata, slug, folder: folder.name, images, cover: covers[0] || images[0] || null, hasInfo: Boolean(info) });
+    projects.push({ ...metadata, slug, folder: folder.name, images: sortImages(images, metadata.imageOrder), cover: covers[0] || images[0] || null, hasInfo: Boolean(info) });
   }
   projects.sort((a, b) => a.order - b.order || natural(a.title, b.title));
   const snapshot = { schemaVersion: 2, storage: 'yandex-direct', publicUrl, syncedAt: now.toISOString(), sourceName: source.name, projects, warnings };

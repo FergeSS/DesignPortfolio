@@ -1,7 +1,7 @@
 import { readFile, readdir, writeFile, mkdir, cp, rm, rename } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { escapeHtml as e, hash } from './content.mjs';
+import { escapeHtml as e, hash, galleryImages } from './content.mjs';
 
 async function siteVersion(root, config, snapshot) {
   const sources = [];
@@ -66,7 +66,7 @@ export function renderHome(config, snapshot) {
 export function renderProject(config, project, next, index = 0, total = 1) {
   const base = '../../';
   const description = project.description.split(/\n\s*\n/).filter(Boolean).map((p) => `<p>${e(p).replaceAll('\n', '<br>')}</p>`).join('');
-  const images = [...project.images].sort((a, b) => Number(b.path === project.cover?.path) - Number(a.path === project.cover?.path));
+  const images = galleryImages(project.images, project.imageOrder, project.cover?.name);
   const gallery = images.map((image, i) => remoteImage(image, project.title, { extra: 'gallery-frame', attrs: `data-gallery-index="${i}" data-name="${e(image.name)}" data-format="${e(format(image))}"${i ? ' hidden' : ''}` })).join('');
   const thumbnails = images.map((image, i) => `<button class="thumbnail${i ? '' : ' selected'}" data-select-image="${i}" aria-label="Изображение ${i + 1}: ${e(image.name)}" aria-pressed="${!i}">${remoteImage(image, project.title, { cover: true, mode: 'preview' })}</button>`).join('');
   return layout(config, { title: `${project.title} — ${config.title}`, base, page: 'project', content: `<div class="project-navigation"><a class="back pill glass" href="${base}${pageVersion(config)}#works">${icon(base, 'back')}К работам</a><span class="caption">${pad(index + 1)} / ${pad(total)}</span></div><div class="project-heading"><h1>${e(project.title)}</h1><p class="project-dimensions" data-image-summary>${images.length ? format(images[0]) : ''}</p></div>

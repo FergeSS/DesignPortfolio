@@ -2,7 +2,7 @@ import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { YandexDisk } from '../scripts/yandex.mjs';
-import { decodeInfo, parseInfo, defaultSlug, imagePattern, natural, hash } from '../scripts/content.mjs';
+import { decodeInfo, parseInfo, defaultSlug, imagePattern, natural, hash, validateImageOrder, galleryImages } from '../scripts/content.mjs';
 import { AdminError, WritableDisk, component, child, diskRoot } from './disk.mjs';
 
 const revision = (files) => hash(JSON.stringify(files.map((f) => [f.name, f.md5 || f.revision || f.modified || '', f.size || 0]).sort((a, b) => natural(a[0], b[0]))));
@@ -18,7 +18,9 @@ export function serializeMetadata(input, folder) {
   const slug = line(input.slug || '', 'Адрес');
   const order = Number(input.order);
   if (!title || !Number.isSafeInteger(order) || !String(input.order).trim() || typeof input.published !== 'boolean' || typeof input.description !== 'string' || input.description.length > 200000 || input.description.includes('\0')) throw new AdminError('Укажи название, целый порядок и корректное описание.');
-  const text = `Название: ${title}\nКатегория: ${category}\nГод: ${year}\nПорядок: ${order}\nАдрес: ${slug}\nПубликовать: ${input.published ? 'да' : 'нет'}\nОписание:\n${input.description.trim()}\n`;
+  let imageOrder;
+  try { imageOrder = validateImageOrder(input.imageOrder ?? []); } catch (error) { throw new AdminError(error.message); }
+  const text = `Название: ${title}\nКатегория: ${category}\nГод: ${year}\nПорядок: ${order}\nАдрес: ${slug}\nПубликовать: ${input.published ? 'да' : 'нет'}\n${imageOrder.length ? `Порядок изображений: ${JSON.stringify(imageOrder)}\n` : ''}Описание:\n${input.description.trim()}\n`;
   try { parseInfo(text, folder); } catch (error) { throw new AdminError(error.message); }
   return text;
 }
@@ -106,7 +108,7 @@ export class AdminService {
     const slug = metadata.slug || defaultSlug(child(this.config.sourcePath || '/', folder));
     const images = files.filter((item) => imagePattern.test(item.name) && !item.name.startsWith('.')).sort((a, b) => natural(a.name, b.name)).map((item) => ({ name: item.name, size: item.size || 0, revision: String(item.md5 || item.modified || ''), thumbnail: '/api/thumbnail?' + new URLSearchParams({ folder, name: item.name, revision: String(item.md5 || item.modified || '') }) }));
     const cover = images.find((item) => /^cover\./i.test(item.name))?.name || images[0]?.name || '';
-    return { ...metadata, slug, folder, images, cover, problem, metadataUnavailable, version: metadataUnavailable ? null : revision(files), hasInfo: Boolean(infos.length) };
+    return { ...metadata, slug, folder, images: galleryImages(images, metadata.imageOrder, cover), cover, problem, metadataUnavailable, version: metadataUnavailable ? null : revision(files), hasInfo: Boolean(infos.length) };
   }
   async projects() {
     const context = this.context();
@@ -142,8 +144,12 @@ export class AdminService {
     return this.project(folder);
   }
   async save({ folder, metadata, version }) {
-    await this.current(folder, version);
-    const text = serializeMetadata(metadata, folder);
+    const current = await this.current(folder, version);
+    if (metadata.imageOrder !== undefined) {
+      try { validateImageOrder(metadata.imageOrder); } catch (error) { throw new AdminError(error.message); }
+      if (metadata.imageOrder.some((name) => !current.images.some((image) => image.name === name))) throw new AdminError('В порядке изображений есть отсутствующий файл. Обнови работу перед сохранением.', 409);
+    }
+    const text = serializeMetadata({ ...metadata, imageOrder: metadata.imageOrder ?? current.imageOrder }, folder);
     await this.uniqueSlug(text, folder);
     const path = child(this.settings.root, folder);
     const { items } = await this.writer.list(path);
@@ -188,7 +194,15 @@ export class AdminService {
         const from = child(path, cover.name), to = child(path, `previous-cover-${randomUUID()}.${cover.name.split('.').at(-1)}`);
         await this.writer.move(from, to); moved.push({ from, to });
       }
-      if (!/^cover\./i.test(name)) await this.writer.move(child(path, name), child(path, `cover.${name.split('.').at(-1).toLowerCase()}`));
+      if (!/^cover\./i.test(name)) {
+        const from = child(path, name), to = child(path, `cover.${name.split('.').at(-1).toLowerCase()}`);
+        await this.writer.move(from, to); moved.push({ from, to });
+      }
+      if (project.imageOrder.length) {
+        const renamed = new Map(moved.map(({ from, to }) => [from.split('/').at(-1), to.split('/').at(-1)]));
+        const current = await this.project(folder);
+        return await this.save({ folder, version: current.version, metadata: { ...current, imageOrder: project.images.map((image) => renamed.get(image.name) || image.name) } });
+      }
     } catch (error) {
       for (const move of moved.reverse()) { try { await this.writer.move(move.to, move.from); } catch { /* Existing image bytes are never removed. */ } }
       throw error;

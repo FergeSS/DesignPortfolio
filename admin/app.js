@@ -1,5 +1,5 @@
 const $ = (selector) => document.querySelector(selector);
-const state = { key: '', connected: false, projects: [], current: null, dirty: false, busy: false, publication: { active: false }, replaceName: '', maxUpload: 128 * 1024 * 1024 };
+const state = { key: '', connected: false, projects: [], current: null, imageOrder: [], dirty: false, busy: false, publication: { active: false }, replaceName: '', maxUpload: 128 * 1024 * 1024 };
 let toastTimer, publicationTimer;
 const form = $('#metadata-form');
 function toast(message, error = false) { clearTimeout(toastTimer); const node = $('#toast'); node.textContent = message; node.className = error ? 'toast error' : 'toast'; node.hidden = false; toastTimer = setTimeout(() => { node.hidden = true; }, error ? 11000 : 5000); }
@@ -23,7 +23,8 @@ function locks() {
   $('#publish').disabled = state.busy || state.publication.active;
   $('#refresh').disabled = state.busy;
   for (const field of form.elements) { if (field.type === 'checkbox') field.disabled = locked; else field.readOnly = locked; }
-  document.querySelectorAll('[data-write]').forEach((button) => { button.disabled = locked; });
+  document.querySelectorAll('[data-write]').forEach((button) => { button.disabled = locked || button.dataset.boundary === 'true'; });
+  document.querySelectorAll('.image-card').forEach((card) => { card.dataset.reorderable = String(!locked && state.imageOrder.length > 1); });
   $('#dropzone').classList.toggle('disabled', locked); $('#dropzone').setAttribute('aria-disabled', String(locked));
   $('#save-status').textContent = state.current?.metadataUnavailable ? 'Описание не загружено. Нажми «Обновить», чтобы повторить чтение с Диска.' : !state.connected ? 'Подключи Диск, чтобы редактировать работу.' : state.dirty ? 'Есть несохранённые изменения.' : 'Изменения сохранены на Диске. Для публикации нажми «Обновить сайт».';
 }
@@ -64,10 +65,12 @@ function metadata() {
   const values = {};
   for (const name of ['title', 'category', 'year', 'order', 'slug', 'description']) values[name] = form.elements.namedItem(name).value;
   values.published = form.elements.namedItem('published').checked;
+  values.imageOrder = [...state.imageOrder];
   return values;
 }
 function setProject(project) {
   state.current = project; state.dirty = false;
+  state.imageOrder = project?.images.map((image) => image.name) || [];
   $('#editor-empty').hidden = Boolean(project); $('#editor-body').hidden = !project;
   $('#editor-title').textContent = project?.title || 'Выбери работу';
   $('#folder-path').textContent = project ? `Папка: ${project.folder}` : '';
@@ -99,22 +102,54 @@ function bytesLabel(bytes) { return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 10
 function action(label, callback, danger = false) {
   const button = document.createElement('button'); button.type = 'button'; button.textContent = label; button.dataset.write = ''; if (danger) button.className = 'danger'; button.addEventListener('click', callback); return button;
 }
+function moveImage(from, to) {
+  if (!state.connected || state.busy || state.publication.active || state.current?.metadataUnavailable || from === to || from < 0 || to < 0 || to >= state.imageOrder.length) return;
+  const [name] = state.imageOrder.splice(from, 1); state.imageOrder.splice(to, 0, name);
+  state.dirty = true; renderImages(); locks();
+}
 function renderImages() {
   const list = $('#image-list'); list.replaceChildren(); $('#image-count').textContent = state.current.images.length;
-  for (const image of state.current.images) {
-    const card = document.createElement('article'); card.className = 'image-card';
+  const byName = new Map(state.current.images.map((image) => [image.name, image]));
+  for (const [index, filename] of state.imageOrder.entries()) {
+    const image = byName.get(filename);
+    const card = document.createElement('article'); card.className = 'image-card'; card.dataset.imageName = image.name;
+    card.addEventListener('dragstart', (event) => event.preventDefault());
+    card.addEventListener('pointerdown', (start) => {
+      if (start.button !== 0 || card.dataset.reorderable !== 'true' || start.target.closest('button') || (start.pointerType === 'touch' && !start.target.closest('.image-position'))) return;
+      const folder = state.current.folder; let targetName, moved = false;
+      card.setPointerCapture(start.pointerId);
+      const clearTargets = () => document.querySelectorAll('.image-card').forEach((node) => node.classList.remove('drop-target'));
+      const move = (event) => {
+        if (Math.hypot(event.clientX - start.clientX, event.clientY - start.clientY) < 6 && !moved) return;
+        moved = true; event.preventDefault(); card.classList.add('dragging'); clearTargets();
+        const target = document.elementFromPoint(event.clientX, event.clientY)?.closest('.image-card');
+        targetName = target?.dataset.imageName; target?.classList.add('drop-target');
+      };
+      const end = (event) => {
+        card.removeEventListener('pointermove', move); card.removeEventListener('pointerup', end); card.removeEventListener('pointercancel', end);
+        if (card.hasPointerCapture(start.pointerId)) card.releasePointerCapture(start.pointerId);
+        card.classList.remove('dragging'); clearTargets();
+        if (event.type === 'pointerup' && moved && targetName && state.current.folder === folder) moveImage(state.imageOrder.indexOf(image.name), state.imageOrder.indexOf(targetName));
+      };
+      card.addEventListener('pointermove', move); card.addEventListener('pointerup', end); card.addEventListener('pointercancel', end);
+    });
     const preview = document.createElement('div'); preview.className = 'image-preview';
-    const img = document.createElement('img'); img.src = image.thumbnail; img.loading = 'lazy'; img.alt = image.name; img.referrerPolicy = 'no-referrer'; preview.append(img);
+    const img = document.createElement('img'); img.src = image.thumbnail; img.loading = 'lazy'; img.alt = image.name; img.draggable = false; img.referrerPolicy = 'no-referrer'; preview.append(img);
     const isCover = image.name === state.current.cover;
     if (isCover) { const badge = document.createElement('span'); badge.className = 'cover-badge'; badge.textContent = 'Обложка'; preview.append(badge); }
     const details = document.createElement('div'); details.className = 'image-details';
+    const order = document.createElement('div'); order.className = 'image-order';
+    const position = document.createElement('span'); position.className = 'image-position'; position.textContent = `⋮⋮  ${index + 1} / ${state.imageOrder.length}`; position.title = 'Перетащи карточку, чтобы изменить порядок';
+    const earlier = action('←', () => moveImage(index, index - 1)); earlier.dataset.boundary = String(index === 0); earlier.setAttribute('aria-label', `Переместить ${image.name} раньше`);
+    const later = action('→', () => moveImage(index, index + 1)); later.dataset.boundary = String(index === state.imageOrder.length - 1); later.setAttribute('aria-label', `Переместить ${image.name} позже`);
+    order.append(position, earlier, later);
     const name = document.createElement('p'); name.className = 'image-name'; name.textContent = image.name;
     const size = document.createElement('p'); size.className = 'image-size'; size.textContent = bytesLabel(image.size);
     const actions = document.createElement('div'); actions.className = 'image-actions';
     if (!isCover) actions.append(action('Сделать обложкой', () => perform(async () => { await saveCurrent(); updateProject(await api('/api/cover', { method: 'POST', data: { folder: state.current.folder, name: image.name, version: state.current.version } })); toast('Обложка изменена.'); })));
     actions.append(action('Заменить', () => { state.replaceName = image.name; $('#replace-input').accept = '.' + image.name.split('.').at(-1); $('#replace-input').click(); }));
     actions.append(action('В корзину', () => { if (!confirm(`Переместить «${image.name}» в корзину Яндекс Диска?`)) return; perform(async () => { await saveCurrent(); updateProject(await api('/api/file', { method: 'DELETE', data: { folder: state.current.folder, name: image.name, version: state.current.version } })); toast('Изображение перемещено в корзину.'); }); }, true));
-    details.append(name, size, actions); card.append(preview, details); list.append(card);
+    details.append(order, name, size, actions); card.append(preview, details); list.append(card);
   }
   if (!state.current.images.length) { const empty = document.createElement('p'); empty.className = 'empty small'; empty.textContent = 'Загрузи изображения. Одно из них можно сделать обложкой.'; list.append(empty); }
 }
@@ -128,9 +163,13 @@ async function upload(files, replaceName = '') {
         const file = files[index]; if (file.size > state.maxUpload) throw new Error(`«${file.name}» больше 128 МБ.`);
         $('#upload-progress').textContent = `Загрузка ${index + 1} из ${files.length}: ${file.name}…`;
         const params = new URLSearchParams({ folder: state.current.folder, name: replaceName || file.name, version: state.current.version, replace: replaceName ? '1' : '0' });
+        const previousOrder = [...state.imageOrder];
         updateProject(await api('/api/upload?' + params, { method: 'POST', bytes: file }));
+        const available = new Set(state.current.images.map((image) => image.name));
+        state.imageOrder = [...previousOrder.filter((name) => available.has(name)), ...state.imageOrder.filter((name) => !previousOrder.includes(name))];
+        if (!replaceName) { state.dirty = true; renderImages(); locks(); }
       }
-      toast(replaceName ? 'Изображение заменено.' : 'Изображения загружены на Диск.');
+      toast(replaceName ? 'Изображение заменено.' : 'Изображения загружены. Расставь их и нажми «Сохранить на Диск», чтобы сохранить порядок.');
     } finally { $('#upload-progress').hidden = true; $('#upload-input').value = ''; $('#replace-input').value = ''; }
   });
 }

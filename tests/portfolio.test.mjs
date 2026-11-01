@@ -88,6 +88,30 @@ test('end-to-end: paginated catalog, Unicode paths and static pages without down
   assert.ok((await readFile(resolve(root, 'dist/portfolio.json'))).length < 10000);
 });
 
+test('custom gallery order reaches static pages, keeps the cover independent and appends new files', async (t) => {
+  const root = await setup(t), f = fixture();
+  const order = ['10.png', '02.png', 'cover.png', 'removed.png'];
+  f.files.set('/Кофейня/info.txt', Buffer.from(`Порядок изображений: ${JSON.stringify(order)}\n${text}`));
+  let data = await syncPortfolio({ root, disk: f.disk });
+  assert.deepEqual(data.projects[0].images.map((image) => image.name), ['10.png', '02.png', 'cover.png']);
+  assert.equal(data.projects[0].cover.name, 'cover.png');
+  await buildPortfolio(root);
+  const html = await readFile(resolve(root, 'dist/projects/ezh/index.html'), 'utf8');
+  assert.deepEqual([...html.matchAll(/data-gallery-index="\d+" data-name="([^"]+)"/g)].map((match) => match[1]), ['10.png', '02.png', 'cover.png']);
+  f.dirs['/Кофейня'].push({ type: 'file', path: '/Кофейня/01.png', name: '01.png', size: 20 });
+  data = await syncPortfolio({ root, disk: f.disk });
+  assert.equal(data.projects[0].images.at(-1).name, '01.png');
+  f.dirs['/Кофейня'] = f.dirs['/Кофейня'].filter((item) => item.name !== '10.png');
+  data = await syncPortfolio({ root, disk: f.disk });
+  assert.deepEqual(data.projects[0].images.map((image) => image.name), ['02.png', 'cover.png', '01.png']);
+  const saved = await readFile(resolve(root, '.cache/portfolio.json'), 'utf8');
+  f.files.set('/Кофейня/info.txt', Buffer.from('Порядок изображений: ["../secret.png"]'));
+  await assert.rejects(syncPortfolio({ root, disk: f.disk }), /Порядок изображений/);
+  assert.equal(await readFile(resolve(root, '.cache/portfolio.json'), 'utf8'), saved);
+  const unicode = ['Ёж, "два".png', 'Обложка.png'];
+  assert.deepEqual(parseInfo(`Порядок изображений: ${JSON.stringify(unicode)}`, 'Работа').imageOrder, unicode);
+});
+
 test('bad UTF-8, API failure, duplicate slugs and old media snapshots preserve the previous site', async (t) => {
   const root = await setup(t);
   const first = fixture();

@@ -135,6 +135,31 @@ test('cover changes preserve old images, roll back failed moves and never delete
   await assert.rejects(app.service.removeProject({ folder: '..', version: removed.version }), /Недопустимое/);
 });
 
+test('gallery order survives saves, old clients and cover changes; a failed cover save restores file names', async (t) => {
+  const app = await setup(t); await app.connect();
+  let project = await app.service.project('Постер');
+  project = await app.service.save({ folder: 'Постер', version: project.version, metadata: { ...project, imageOrder: ['cover.png', '02.png'] } });
+  assert.deepEqual((await app.service.project('Постер')).imageOrder, ['cover.png', '02.png']);
+  const { imageOrder, ...oldClient } = project;
+  project = await app.service.save({ folder: 'Постер', version: project.version, metadata: { ...oldClient, title: 'Другое название' } });
+  assert.deepEqual(project.imageOrder, imageOrder);
+  await assert.rejects(app.service.save({ folder: 'Постер', version: project.version, metadata: { ...project, imageOrder: ['missing.png'] } }), /отсутствующий файл/);
+  await assert.rejects(app.service.save({ folder: 'Постер', version: project.version, metadata: { ...project, imageOrder: ['02.png', '02.png'] } }), /уникальных/);
+  const previousInfo = Buffer.from(app.disk.files.get(ROOT + '/Постер/info.txt'));
+  app.disk.failUpload = true;
+  await assert.rejects(app.service.cover({ folder: 'Постер', version: project.version, name: '02.png' }), /Ошибка загрузки/);
+  assert.ok(app.disk.files.has(ROOT + '/Постер/cover.png')); assert.ok(app.disk.files.has(ROOT + '/Постер/02.png'));
+  assert.deepEqual(app.disk.files.get(ROOT + '/Постер/info.txt'), previousInfo);
+  app.disk.failUpload = false;
+  project = await app.service.cover({ folder: 'Постер', version: project.version, name: '02.png' });
+  assert.match(project.images[0].name, /^previous-cover-/); assert.equal(project.images[1].name, 'cover.png');
+  assert.equal(project.cover, 'cover.png'); assert.deepEqual(project.imageOrder, project.images.map((image) => image.name));
+  const uploaded = await app.service.upload({ folder: 'Постер', version: project.version, name: 'Ава.png', bytes: png });
+  assert.equal(uploaded.images.at(-1).name, 'Ава.png');
+  project = await app.service.save({ folder: 'Постер', version: uploaded.version, metadata: { ...uploaded, imageOrder: uploaded.images.map((image) => image.name).reverse() } });
+  assert.equal((await app.service.project('Постер')).images[0].name, 'Ава.png');
+});
+
 test('uploads require a supported image signature and explicit replacement; creation failure preserves existing projects', async (t) => {
   const app = await setup(t); await app.connect(); const project = await app.service.project('Постер');
   await assert.rejects(app.service.upload({ folder: 'Постер', name: 'cover.png', version: project.version, bytes: png }), /уже есть/);
