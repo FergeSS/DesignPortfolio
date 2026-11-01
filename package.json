@@ -4,6 +4,7 @@
   "type": "module",
   "engines": { "node": ">=22" },
   "scripts": {
+    "admin": "node scripts/admin.mjs",
     "sync": "node scripts/sync.mjs",
     "build": "node scripts/build.mjs",
     "refresh": "npm run sync && npm run build",
