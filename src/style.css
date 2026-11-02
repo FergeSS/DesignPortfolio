@@ -96,6 +96,7 @@ body[data-page='project'] .shell { padding-bottom: 48px; }
 .thumbnail .cover { width: min(124px,calc(48px * (var(--media-ratio,16 / 9)))); max-height: none; border-radius: 8px; }
 .thumbnail .media-status { font-size: 0; padding: 0; }
 .project-information { display: flex; justify-content: space-between; align-items: flex-start; gap: 60px; margin-top: 48px; min-height: 140px; }
+.project-information--no-description { justify-content: flex-end; min-height: 0; }
 .project-description { flex: 1; min-width: 0; max-width: 760px; }
 .description { margin-top: 16px; max-width: 720px; font-size: 20px; line-height: 30px; overflow-wrap: anywhere; }
 .description p + p { margin-top: 20px; }
