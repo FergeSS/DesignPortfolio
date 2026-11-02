@@ -22,7 +22,7 @@ export function mosaicWidths(covers, width, gap = 24) {
   best[items.length] = 0;
   for (let start = items.length - 1; start >= 0; start--) {
     let ratioSum = 0;
-    for (let end = start; end < Math.min(items.length, start + 4); end++) {
+    for (let end = start; end < Math.min(items.length, start + 3); end++) {
       ratioSum += items[end].ratio;
       const count = end - start + 1;
       const height = (width - gap * (count - 1) - inset * count) / ratioSum;
@@ -51,6 +51,45 @@ export function mosaicWidths(covers, width, gap = 24) {
     start = end + 1;
   }
   return result;
+}
+
+// Regroup only nearby portrait/square covers. Two large posters should share
+// their own row rather than compete with smaller covers between them.
+export function mosaicLayout(covers, width, gap = 24) {
+  const items = covers.map((cover, index) => ({ cover, index,
+    ratio: cover?.width > 0 && cover?.height > 0 ? cover.width / cover.height : null,
+    pixels: cover?.width * cover?.height || 0,
+  }));
+  const groups = [];
+  let pending = [];
+  const flush = () => { if (pending.length) groups.push(pending); pending = []; };
+  for (let start = 0; start < items.length;) {
+    let end = start;
+    if (width > 600) {
+      while (end < Math.min(items.length, start + 6) && items[end].ratio > 0 && items[end].ratio <= 1.2) end++;
+    }
+    const neighbors = items.slice(start, end);
+    const smallest = Math.min(...neighbors.map((item) => item.pixels));
+    const isPoster = (item) => item.ratio < .9 && item.pixels >= Math.max(4_000_000, smallest * 4);
+    const posters = neighbors.filter(isPoster);
+    const others = neighbors.filter((item) => !isPoster(item));
+    if (posters.length >= 2 && others.length) {
+      pending.push(...others);
+      flush();
+      groups.push(posters);
+      start = end;
+    } else {
+      pending.push(items[start++]);
+    }
+  }
+  flush();
+  const widths = Array(covers.length);
+  const order = [];
+  for (const group of groups) {
+    const sizes = mosaicWidths(group.map((item) => item.cover), width, gap);
+    group.forEach((item, index) => { widths[item.index] = sizes[index]; order.push(item.index); });
+  }
+  return { widths, order };
 }
 
 export function initPortfolioUI({ document, window }) {
@@ -95,8 +134,12 @@ export function initPortfolioUI({ document, window }) {
       });
       const width = grid.getBoundingClientRect().width;
       const gap = parseFloat(window.getComputedStyle(grid).columnGap);
-      const widths = mosaicWidths(covers, width, gap);
+      const { widths, order } = mosaicLayout(covers, width, gap);
       visible.forEach((card, i) => { const value = `${widths[i].toFixed(3)}px`; if (card.style.width !== value) card.style.width = value; });
+      const arranged = order.map((index) => visible[index]);
+      const current = [...grid.querySelectorAll('.card')].filter((card) => !card.hidden);
+      // Keep keyboard navigation in the same order as the visible mosaic.
+      if (arranged.some((card, index) => card !== current[index])) grid.append(...arranged);
       request = undefined;
     };
     const schedule = () => { if (!request) request = window.requestAnimationFrame(layout); };

@@ -56,7 +56,7 @@ a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px soli
 .card-link { display: flex; flex-direction: column; gap: 12px; height: 100%; }
 .cover { position: relative; aspect-ratio: var(--media-ratio,16/9); background: #17171e; overflow: hidden; border-radius: 17px; }
 .remote-image { display: block; width: 100%; height: 100%; object-fit: contain; }
-.card .cover { flex: none; max-height: max(160px,calc(100svh - 220px)); }
+.card .cover { flex: none; }
 .card .remote-image { object-fit: scale-down; }
 .card-caption { min-height: 42px; display: flex; align-items: center; justify-content: space-between; padding: 0 8px; gap: 16px; }
 .card-caption h2 { font-size: 16px; font-weight: 500; line-height: 1.5; overflow-wrap: anywhere; }
@@ -175,6 +175,7 @@ dialog[open] { animation: viewer-enter .3s var(--ease); }
   .section-heading h2 { font-size: 25px; }
   .grid { gap: 16px; }
   .card { width: 100%; }
+  .card .cover { max-height: max(160px,calc(100svh - 220px)); }
   .card-surface { padding: 8px 8px 10px; }
   .card-glow { filter: blur(24px) saturate(1.4); }
   .card-link { gap: 8px; }
