@@ -104,27 +104,41 @@ test('card glare follows the mouse without rotation, ignores touch and resets on
   assert.equal(properties.size, 0);
 });
 
-test('scroll entrances stagger, rearm only outside the viewport and respect reduced motion', () => {
+function entranceScene({ tops = [2000, 2600], scroll = 0 } = {}) {
   const reduced = new EventTarget(); reduced.matches = false;
   const list = () => {
     const values = new Set();
     return { add: (key) => values.add(key), remove: (key) => values.delete(key), contains: (key) => values.has(key) };
   };
-  const cards = [0, 1].map(() => {
+  const pending = new Map(); let serial = 0, time = 0;
+  const window = new EventTarget();
+  Object.assign(window, { scrollY: scroll, innerHeight: 720, matchMedia: () => reduced,
+    performance: { now: () => time },
+    requestAnimationFrame: (callback) => { pending.set(++serial, callback); return serial; },
+    cancelAnimationFrame: (id) => pending.delete(id),
+  });
+  const cards = tops.map((top) => {
     const properties = new Map();
-    return { classList: list(), style: { setProperty: (key, value) => properties.set(key, value), removeProperty: (key) => properties.delete(key) }, properties };
+    return { top, classList: list(), style: { setProperty: (key, value) => properties.set(key, value), removeProperty: (key) => properties.delete(key) }, properties,
+      getBoundingClientRect() { return { top: this.top - window.scrollY, bottom: this.top + 400 - window.scrollY, height: this.hidden ? 0 : 400 }; },
+    };
   });
   const observers = [];
-  const window = {
-    matchMedia: () => reduced,
-    IntersectionObserver: class {
-      constructor(callback, options) { Object.assign(this, { callback, options, targets: new Set() }); observers.push(this); }
-      observe(target) { this.targets.add(target); }
-      disconnect() { this.targets.clear(); }
-    },
+  window.IntersectionObserver = class {
+    constructor(callback, options) { Object.assign(this, { callback, options, targets: new Set() }); observers.push(this); }
+    observe(target) { this.targets.add(target); }
+    disconnect() { this.targets.clear(); }
   };
   const document = { documentElement: { classList: list() }, querySelector: () => null, querySelectorAll: () => cards };
-  cards[0].classList.add('is-visible'); // A cover restored by project navigation stays visible.
+  const flush = () => { const callbacks = [...pending.values()]; pending.clear(); callbacks.forEach((callback) => callback()); };
+  const move = (position, elapsed = 16) => { time += elapsed; window.scrollY = position; window.dispatchEvent(new Event('scroll')); };
+  return { cards, window, document, reduced, pending, observers, flush, move };
+}
+
+test('scroll entrances stagger, rearm only well outside the viewport and respect reduced motion', () => {
+  const page = entranceScene();
+  const { cards, document, window, reduced, observers } = page;
+  cards[0].classList.add('is-visible');
   const destroy = initMotion({ document, window });
   const [entrance, reset] = observers;
   assert.equal(entrance.targets.size, 2);
@@ -133,13 +147,13 @@ test('scroll entrances stagger, rearm only outside the viewport and respect redu
   reset.callback([entry(cards[0], false), entry(cards[1], false)]);
   entrance.callback([entry(cards[1], true, 300), entry(cards[0], true)]);
   assert.equal(cards[0].properties.get('--entry-delay'), '0ms');
-  assert.equal(cards[1].properties.get('--entry-delay'), '110ms');
+  assert.equal(cards[1].properties.get('--entry-delay'), '60ms');
   entrance.callback([entry(cards[0], false)]);
-  assert.equal(cards[0].classList.contains('is-visible'), true, 'a small reverse scroll does not hide the card');
+  assert.equal(cards[0].classList.contains('is-visible'), true);
   reset.callback([entry(cards[0], false)]);
   assert.equal(cards[0].classList.contains('is-visible'), false);
   entrance.callback([entry(cards[0], true)]);
-  assert.equal(cards[0].classList.contains('is-visible'), true, 'returning cards reveal again');
+  assert.equal(cards[0].classList.contains('is-visible'), true);
   reduced.matches = true; reduced.dispatchEvent(new Event('change'));
   assert.equal(document.documentElement.classList.contains('motion-ready'), false);
   assert.ok(cards.every((card) => card.classList.contains('is-visible')));
@@ -148,4 +162,48 @@ test('scroll entrances stagger, rearm only outside the viewport and respect redu
   destroy();
   assert.ok(observers.every((observer) => !observer.targets.size));
   assert.ok(cards.every((card) => !card.properties.size));
+});
+
+test('fast scrolling finishes visible entrances immediately without revealing the whole portfolio', () => {
+  const page = entranceScene({ tops: [2000, 2300, 6000] });
+  const { cards, document, window } = page;
+  const destroy = initMotion({ document, window });
+  page.move(16);
+  assert.equal(page.pending.size, 0, 'slow scrolling keeps normal entrances');
+  page.move(1900);
+  page.move(2000);
+  assert.equal(page.pending.size, 1, 'rapid scroll events share one visibility update');
+  page.flush();
+  for (const card of cards.slice(0, 2)) {
+    assert.equal(card.classList.contains('is-visible'), true);
+    assert.equal(card.classList.contains('is-reveal-immediate'), true);
+    assert.equal(card.properties.get('--entry-delay'), '0ms');
+  }
+  assert.equal(cards[2].classList.contains('is-visible'), false);
+  page.observers[1].callback([{ target: cards[0], isIntersecting: false }]);
+  assert.equal(cards[0].classList.contains('is-visible'), true, 'stale exit notifications cannot hide a visible card');
+  page.move(0); page.flush();
+  page.observers[1].callback([{ target: cards[0], isIntersecting: false }]);
+  assert.equal(cards[0].classList.contains('is-reveal-immediate'), false, 'far-off cards can animate on a later slow return');
+  page.move(2000);
+  destroy();
+  assert.equal(page.pending.size, 0);
+  page.move(2100);
+  assert.equal(page.pending.size, 0, 'navigation removes scroll listeners');
+});
+
+test('cards already on screen after a deep link or resize are visible without waiting', () => {
+  const page = entranceScene({ tops: [2000, 6000], scroll: 1900 });
+  const { cards, document, window } = page;
+  const destroy = initMotion({ document, window });
+  assert.equal(cards[0].classList.contains('is-reveal-immediate'), true);
+  cards[1].top = 2200;
+  window.dispatchEvent(new Event('resize'));
+  page.flush();
+  assert.equal(cards[1].classList.contains('is-reveal-immediate'), true);
+  page.reduced.matches = true;
+  page.reduced.dispatchEvent(new Event('change'));
+  page.move(2500);
+  assert.equal(page.pending.size, 0);
+  destroy();
 });
