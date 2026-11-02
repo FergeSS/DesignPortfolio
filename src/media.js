@@ -155,6 +155,8 @@ export function mountMedia({ document, window, publicUrl, resolveMedia = createM
     frame.dataset.state = 'idle';
   }
 
+  // Start originals about one screen ahead, in either scroll direction.
+  const preloadDistance = Math.round(Math.max(720, Math.min(1200, window.innerHeight || 800)));
   const observer = window.IntersectionObserver ? new window.IntersectionObserver((entries) => {
     for (const entry of entries) {
       const state = states.get(entry.target);
@@ -166,7 +168,7 @@ export function mountMedia({ document, window, publicUrl, resolveMedia = createM
         state.unloadTimer = window.setTimeout(() => release(entry.target), 1500);
       }
     }
-  }, { rootMargin: '300px' }) : null;
+  }, { rootMargin: `${preloadDistance}px 0px` }) : null;
 
   for (const frame of frames) {
     frame.querySelector('.media-retry')?.addEventListener('click', () => { void show(frame, true); });
