@@ -129,10 +129,11 @@ function entranceScene({ tops = [2000, 2600], scroll = 0 } = {}) {
     observe(target) { this.targets.add(target); }
     disconnect() { this.targets.clear(); }
   };
-  const document = { documentElement: { classList: list() }, querySelector: () => null, querySelectorAll: () => cards };
+  const grid = new EventTarget();
+  const document = { documentElement: { classList: list() }, querySelector: (selector) => selector === '.grid' ? grid : null, querySelectorAll: () => cards };
   const flush = () => { const callbacks = [...pending.values()]; pending.clear(); callbacks.forEach((callback) => callback()); };
   const move = (position, elapsed = 16) => { time += elapsed; window.scrollY = position; window.dispatchEvent(new Event('scroll')); };
-  return { cards, window, document, reduced, pending, observers, flush, move };
+  return { cards, grid, window, document, reduced, pending, observers, flush, move };
 }
 
 test('scroll entrances stagger, rearm only well outside the viewport and respect reduced motion', () => {
@@ -147,7 +148,7 @@ test('scroll entrances stagger, rearm only well outside the viewport and respect
   reset.callback([entry(cards[0], false), entry(cards[1], false)]);
   entrance.callback([entry(cards[1], true, 300), entry(cards[0], true)]);
   assert.equal(cards[0].properties.get('--entry-delay'), '0ms');
-  assert.equal(cards[1].properties.get('--entry-delay'), '60ms');
+  assert.equal(cards[1].properties.get('--entry-delay'), '40ms');
   entrance.callback([entry(cards[0], false)]);
   assert.equal(cards[0].classList.contains('is-visible'), true);
   reset.callback([entry(cards[0], false)]);
@@ -205,5 +206,20 @@ test('cards already on screen after a deep link or resize are visible without wa
   page.reduced.dispatchEvent(new Event('change'));
   page.move(2500);
   assert.equal(page.pending.size, 0);
+  destroy();
+});
+
+
+test('ordinary scroll steps and mosaic reflows preserve a running entrance animation', () => {
+  const page = entranceScene({ tops: [800, 1400] });
+  const destroy = initMotion(page);
+  page.move(100, 100);
+  assert.equal(page.pending.size, 0, 'an ordinary wheel step must not disable the entrance');
+  page.observers[0].callback([{ target: page.cards[0], isIntersecting: true, boundingClientRect: { top: 700, left: 0 } }]);
+  assert.equal(page.cards[0].classList.contains('is-visible'), true);
+  assert.equal(page.cards[0].classList.contains('is-reveal-immediate'), false);
+  page.grid.dispatchEvent(new Event('mosaiclayout'));
+  assert.equal(page.pending.size, 0, 'background image sizing must not finish visible animations');
+  assert.equal(page.cards[0].classList.contains('is-reveal-immediate'), false);
   destroy();
 });

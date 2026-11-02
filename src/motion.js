@@ -69,7 +69,6 @@ export function initMotion({ document, window, reduced = window.matchMedia('(pre
   let observer;
   let resetObserver;
   const elements = [...document.querySelectorAll('[data-reveal]')];
-  const grid = document.querySelector('.grid');
   let request;
   let lastScroll = window.scrollY;
   let lastTime = window.performance?.now() ?? Date.now();
@@ -93,21 +92,20 @@ export function initMotion({ document, window, reduced = window.matchMedia('(pre
     lastScroll = window.scrollY;
     lastTime = now;
     // A fast scroll must never leave a loaded card waiting on its entrance.
-    if (!reduced.matches && (distance >= 96 || distance / elapsed > 1.5)) scheduleFinish();
+    if (!reduced.matches && (distance >= window.innerHeight * .8 || distance / elapsed > 3)) scheduleFinish();
   };
   window.addEventListener('scroll', onScroll, { passive: true });
   window.addEventListener('resize', scheduleFinish);
-  grid?.addEventListener('mosaiclayout', scheduleFinish);
   function reveal() {
     if (reduced.matches || !window.IntersectionObserver || !elements.length) return;
     observer = new window.IntersectionObserver((entries) => {
       const entering = entries.filter((entry) => entry.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top || a.boundingClientRect.left - b.boundingClientRect.left);
       entering.forEach((entry, index) => {
         if (entry.target.classList.contains('is-visible')) return;
-        entry.target.style.setProperty('--entry-delay', `${Math.min(index, 2) * 60}ms`);
+        entry.target.style.setProperty('--entry-delay', `${Math.min(index, 2) * 40}ms`);
         entry.target.classList.add('is-visible');
       });
-    }, { threshold: 0, rootMargin: '420px 0px' });
+    }, { threshold: 0, rootMargin: '64px 0px' });
     // Rearm only well outside the viewport, so reversing a small scroll never flickers.
     resetObserver = new window.IntersectionObserver((entries) => {
       for (const entry of entries) if (!entry.isIntersecting) {
@@ -137,7 +135,6 @@ export function initMotion({ document, window, reduced = window.matchMedia('(pre
   return () => {
     destroyHeroScroll(); reduced.removeEventListener('change', resetMotion);
     window.removeEventListener('scroll', onScroll); window.removeEventListener('resize', scheduleFinish);
-    grid?.removeEventListener('mosaiclayout', scheduleFinish);
     if (request !== undefined) window.cancelAnimationFrame(request);
     observer?.disconnect(); resetObserver?.disconnect(); root.classList.remove('motion-ready');
     elements.forEach((element) => { element.style.removeProperty('--entry-delay'); element.classList.remove('is-reveal-immediate'); });
