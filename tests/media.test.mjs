@@ -61,7 +61,7 @@ test('media resolver bounds concurrency and handles denied or invalid URLs', asy
   await assert.rejects(invalid('/image.png'), /не выдал ссылку/);
 });
 
-function fakePage(resolver, viewer = null) {
+function fakePage(resolver, viewer = null, { mode = 'full', storage } = {}) {
   class Image extends EventTarget {
     naturalWidth = 1200;
     naturalHeight = 800;
@@ -79,7 +79,7 @@ function fakePage(resolver, viewer = null) {
   const glowDraws = [];
   const glow = { width: 0, height: 0, classList: { add: (value) => glowClasses.add(value), remove: (value) => glowClasses.delete(value) }, getContext: () => ({ drawImage: (...args) => glowDraws.push(args) }) };
   const frame = {
-    dataset: { diskPath: '/Работа/01.png', diskMode: 'full', diskRevision: '1' },
+    dataset: { diskPath: '/Работа/01.png', diskMode: mode, diskRevision: '1' },
     style: { setProperty: (key, value) => dimensions.set(key, value) },
     querySelector: (selector) => ({ img: image, '.media-status': status, '.media-actions': actions, '.transition-preview': preview })[selector],
     closest: () => ({ querySelector: () => glow }),
@@ -87,6 +87,7 @@ function fakePage(resolver, viewer = null) {
   const timers = new Set();
   let observer;
   const window = {
+    localStorage: storage,
     IntersectionObserver: class {
       constructor(callback) { observer = callback; }
       observe() {}
@@ -249,4 +250,24 @@ test('gallery honors reduced motion and recenters the active thumbnail after res
   page.window.dispatchEvent(new Event('resize'));
   assert.deepEqual(page.scrolls.at(-1), { left: 40, behavior: 'instant' });
   page.loader.destroy();
+});
+
+test('preview dimensions cannot overwrite the original resolution cached for mosaic layout', async () => {
+  const entries = new Map();
+  const storage = { getItem: (key) => entries.get(key), setItem: (key, value) => entries.set(key, value) };
+  const resolver = async () => 'https://media.example/image';
+  resolver.clear = () => {};
+  const full = fakePage(resolver, null, { storage });
+  full.image.naturalWidth = 3000;
+  full.image.naturalHeight = 4000;
+  await full.loader.show(full.frame);
+  const preview = fakePage(resolver, null, { mode: 'preview', storage });
+  preview.image.naturalWidth = 225;
+  preview.image.naturalHeight = 300;
+  await preview.loader.show(preview.frame);
+  const restored = fakePage(resolver, null, { storage });
+  assert.equal(restored.dimensions.get('--media-ratio'), '3000 / 4000');
+  const restoredPreview = fakePage(resolver, null, { mode: 'preview', storage });
+  assert.equal(restoredPreview.dimensions.get('--media-ratio'), '225 / 300');
+  for (const page of [full, preview, restored, restoredPreview]) page.loader.destroy();
 });

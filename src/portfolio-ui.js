@@ -1,26 +1,55 @@
-// Each row shares one image height; card insets and captions stay identical.
-export function mosaicWidths(ratios, width, gap = 24) {
-  if (width <= 560) return ratios.map(() => width);
-  const result = [];
-  let row = [];
-  function flush() {
-    if (!row.length) return;
-    const height = (width - gap * (row.length - 1) - 22 * row.length) / row.reduce((sum, ratio) => sum + ratio, 0);
-    result.push(...row.map((ratio) => height * ratio + 22));
-    row = [];
-  }
-  for (const value of ratios) {
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+// Covers can be ratios (unknown resolution) or original pixel dimensions.
+// Compare complete row arrangements so a small final cover can share an earlier row.
+export function mosaicWidths(covers, width, gap = 24) {
+  if (!covers.length) return [];
+  if (width <= 600) return covers.map(() => Math.max(0, width));
+  const inset = 22;
+  const targetHeight = clamp(width / 3.4, 240, 360);
+  const items = covers.map((cover) => {
+    const known = Number.isFinite(cover?.width) && cover.width > 0 && Number.isFinite(cover?.height) && cover.height > 0;
+    const value = known ? cover.width / cover.height : cover;
     const ratio = Number.isFinite(value) && value > 0 ? value : 16 / 9;
-    if (ratio >= 2.2) {
-      if (row.length === 1 && row[0] < 1) { row.push(ratio); flush(); }
-      else { flush(); result.push(width); }
-      continue;
+    // Resolution has a restrained influence: a 12 MP poster gets more room than
+    // a tiny logo, without making layout sizes proportional to file dimensions.
+    const pixels = known ? Math.sqrt(cover.width * cover.height) : 1000;
+    const preference = targetHeight * clamp((pixels / 1000) ** .2, .65, 1.35);
+    return { ratio, preference, height: known ? cover.height : null };
+  });
+  const best = Array(items.length + 1).fill(Infinity);
+  const rows = Array(items.length);
+  best[items.length] = 0;
+  for (let start = items.length - 1; start >= 0; start--) {
+    let ratioSum = 0;
+    for (let end = start; end < Math.min(items.length, start + 4); end++) {
+      ratioSum += items[end].ratio;
+      const count = end - start + 1;
+      const height = (width - gap * (count - 1) - inset * count) / ratioSum;
+      if (height <= 0) continue;
+      let cost = .06;
+      for (let index = start; index <= end; index++) {
+        const item = items[index];
+        cost += Math.log(height / item.preference) ** 2;
+        // Softly discourage enlarging low-resolution originals. Cap the penalty
+        // so an unusually small file cannot dictate every surrounding row.
+        if (item.height) cost += .8 * Math.log(clamp(height / item.height, 1, 4)) ** 2;
+        const imageWidth = height * item.ratio;
+        cost += 3 * Math.max(0, (Math.min(180, width * .18) - imageWidth) / 180) ** 2;
+      }
+      cost += 6 * Math.max(0, height / Math.min(600, width * .65) - 1) ** 2;
+      if (cost + best[end + 1] < best[start]) {
+        best[start] = cost + best[end + 1];
+        rows[start] = { end, height };
+      }
     }
-    row.push(ratio);
-    const height = (width - gap * (row.length - 1) - 22 * row.length) / row.reduce((sum, r) => sum + r, 0);
-    if ((row.length >= 2 && height <= 420) || row.length >= 3) flush();
   }
-  flush();
+  const result = [];
+  for (let start = 0; start < items.length;) {
+    const { end, height } = rows[start];
+    for (let index = start; index <= end; index++) result.push(height * items[index].ratio + inset);
+    start = end + 1;
+  }
   return result;
 }
 
@@ -59,14 +88,14 @@ export function initPortfolioUI({ document, window }) {
     let request;
     const layout = () => {
       const visible = cards.filter((card) => !card.hidden);
-      const ratios = visible.map((card) => {
+      const covers = visible.map((card) => {
         const cover = card.querySelector('.remote-media');
-        const ratio = cover?.style.getPropertyValue('--media-ratio').split('/').map(Number);
-        return ratio?.length === 2 ? ratio[0] / ratio[1] : 16 / 9;
+        const dimensions = cover?.style.getPropertyValue('--media-ratio').split('/').map(Number);
+        return dimensions?.length === 2 ? { width: dimensions[0], height: dimensions[1] } : 16 / 9;
       });
       const width = grid.getBoundingClientRect().width;
       const gap = parseFloat(window.getComputedStyle(grid).columnGap);
-      const widths = mosaicWidths(ratios, width, gap);
+      const widths = mosaicWidths(covers, width, gap);
       visible.forEach((card, i) => { const value = `${widths[i].toFixed(3)}px`; if (card.style.width !== value) card.style.width = value; });
       request = undefined;
     };

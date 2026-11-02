@@ -84,7 +84,8 @@ export function mountMedia({ document, window, publicUrl, resolveMedia = createM
   const frames = [...document.querySelectorAll('.remote-media')];
   const states = new WeakMap();
   const visible = new Set();
-  const ratioKey = (frame) => `portfolio-ratio:${frame.dataset.diskPath}:${frame.dataset.diskRevision}`;
+  // Preview dimensions must never replace the original resolution used by the mosaic.
+  const ratioKey = (frame) => `portfolio-dimensions:${frame.dataset.diskMode || 'full'}:${frame.dataset.diskPath}:${frame.dataset.diskRevision}`;
   for (const frame of frames) {
     states.set(frame, { generation: 0 });
     try {
