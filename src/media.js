@@ -101,7 +101,7 @@ export function mosaicPreloadFrames(covers, viewportHeight, bufferRows = 3) {
   return rows.slice(Math.max(0, first - bufferRows), Math.min(rows.length, Math.max(first, after) + bufferRows)).flatMap((row) => row.frames);
 }
 
-export function mountMedia({ document, window, publicUrl, resolveMedia = createMediaResolver({ publicUrl }) }) {
+export function mountMedia({ document, window, publicUrl, reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)'), resolveMedia = createMediaResolver({ publicUrl }) }) {
   const frames = [...document.querySelectorAll('.remote-media')];
   const states = new WeakMap();
   const visible = new Set();
@@ -251,7 +251,6 @@ export function mountMedia({ document, window, publicUrl, resolveMedia = createM
   const gallery = [...document.querySelectorAll('.gallery-frame')];
   const thumbnails = [...document.querySelectorAll('[data-select-image]')];
   const thumbnailStrip = document.querySelector('.thumbnails');
-  const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)');
   let selected = 0;
   let viewerController;
   let selectionAnimation;
@@ -314,6 +313,8 @@ export function mountMedia({ document, window, publicUrl, resolveMedia = createM
   const onGalleryResize = () => centerThumbnail('instant');
   document.addEventListener('keydown', onGalleryKey);
   window.addEventListener('resize', onGalleryResize);
+  const onMotionChange = () => { if (reduced.matches) { selectionAnimation?.cancel(); centerThumbnail('instant'); } };
+  reduced?.addEventListener('change', onMotionChange);
   document.querySelector('.expand-viewer')?.addEventListener('click', () => { void openViewer(); });
   async function openViewer() {
     const frame = gallery[selected];
@@ -374,5 +375,5 @@ export function mountMedia({ document, window, publicUrl, resolveMedia = createM
   const restore = () => { preloadPaused = false; for (const frame of visible) void show(frame); refreshGridPreload(); };
   window.addEventListener('pagehide', hide);
   window.addEventListener('pageshow', restore);
-  return { show, release, destroy() { stopGridPreload(); selectionAnimation?.cancel(); hide(); observer?.disconnect(); document.removeEventListener('keydown', onGalleryKey); window.removeEventListener('resize', onGalleryResize); window.removeEventListener('pagehide', hide); window.removeEventListener('pageshow', restore); } };
+  return { show, release, destroy() { reduced?.removeEventListener('change', onMotionChange); stopGridPreload(); selectionAnimation?.cancel(); hide(); observer?.disconnect(); document.removeEventListener('keydown', onGalleryKey); window.removeEventListener('resize', onGalleryResize); window.removeEventListener('pagehide', hide); window.removeEventListener('pageshow', restore); } };
 }

@@ -63,8 +63,7 @@ export function initHeroScroll({ document, window, reduced = window.matchMedia('
   };
 }
 
-export function initMotion({ document, window }) {
-  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+export function initMotion({ document, window, reduced = window.matchMedia('(prefers-reduced-motion: reduce)') }) {
   const root = document.documentElement;
   const destroyHeroScroll = initHeroScroll({ document, window, reduced });
   let observer;
@@ -145,11 +144,10 @@ export function initMotion({ document, window }) {
   };
 }
 
-export function initCardInteractions({ document, window }) {
+export function initCardInteractions({ document, window, reduced = window.matchMedia('(prefers-reduced-motion: reduce)') }) {
   const grid = document.querySelector('.grid');
   if (!grid) return () => {};
   const hover = window.matchMedia('(hover: hover) and (pointer: fine)');
-  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
   let active;
   let request;
   let pointer;

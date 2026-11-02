@@ -46,7 +46,7 @@ function fixture() {
 async function setup(t) {
   const root = await mkdtemp(resolve(tmpdir(), 'portfolio-test-'));
   t.after(() => rm(root, { recursive: true, force: true }));
-  await writeFile(resolve(root, 'portfolio.config.json'), JSON.stringify({ title: 'Портфолио', description: 'Описание', publicUrl: 'https://disk.yandex.ru/d/test', sourcePath: '/', ignoredFolders: ['Черновики'] }));
+  await writeFile(resolve(root, 'portfolio.config.json'), JSON.stringify({ title: 'Портфолио', description: 'Описание', publicUrl: 'https://disk.yandex.ru/d/test', sourcePath: '/', ignoredFolders: ['Черновики'], animationsEnabled: false }));
   await mkdir(resolve(root, 'src'));
   await writeFile(resolve(root, 'src/style.css'), 'body{}');
   return root;
@@ -65,11 +65,15 @@ test('end-to-end: paginated catalog, Unicode paths and static pages without down
   await buildPortfolio(root);
   const home = await readFile(resolve(root, 'dist/index.html'), 'utf8');
   assert.ok(home.includes('./projects/ezh/'));
+  assert.ok(home.includes('data-animations="off"'));
+  assert.ok(!home.includes('data-toggle-animations'), 'the animation setting must not add a public switch');
   assert.ok(home.includes('Нет материалов'));
   assert.ok(!home.includes('Скрыто'));
   assert.ok(!home.includes('<script>alert(1)</script>'));
   const project = await readFile(resolve(root, 'dist/projects/ezh/index.html'), 'utf8');
   assert.ok(project.includes('Первый абзац.</p><p>Второй абзац.'));
+  assert.ok(project.includes('data-animations="off"'));
+  assert.ok(!project.includes('data-toggle-animations'));
   assert.ok(project.includes('data-disk-path="/Кофейня/02.png"'));
   assert.ok(home.includes('data-disk-mode="full"'), 'portfolio cards must load originals');
   assert.ok(!home.includes('data-disk-mode="preview"'), 'large covers must never request reduced previews');

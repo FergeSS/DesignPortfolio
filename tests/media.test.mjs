@@ -206,14 +206,15 @@ function galleryPage(reducedMotion = false) {
     querySelector: (selector) => ({ '#lightbox': viewer, '.thumbnails': strip })[selector] || null,
     querySelectorAll: (selector) => ({ '.remote-media': gallery, '.gallery-frame': gallery, '[data-select-image]': thumbnails, '[data-gallery-step]': [previous, next], '[data-image-count]': [count] })[selector] || [],
   });
+  const reduced = Object.assign(new EventTarget(), { matches: reducedMotion });
   const window = Object.assign(new EventTarget(), {
-    matchMedia: () => ({ matches: reducedMotion }), clearTimeout() {},
+    matchMedia: () => reduced, clearTimeout() {},
     IntersectionObserver: class { observe() {} disconnect() {} },
   });
   const resolver = async () => 'https://media.example/full'; resolver.clear = () => {};
   const loader = mountMedia({ document, window, publicUrl: 'https://disk.yandex.ru/d/test', resolveMedia: resolver });
   const key = (name, target) => { const event = Object.assign(new Event('keydown', { cancelable: true }), { key: name }); Object.defineProperty(event, 'target', { value: target }); document.dispatchEvent(event); return event; };
-  return { loader, gallery, thumbnails, previous, next, count, viewer, key, window, animations, scrolls, focused };
+  return { loader, gallery, thumbnails, previous, next, count, viewer, key, window, reduced, animations, scrolls, focused };
 }
 
 test('gallery arrows wrap, update selection and animate only the thumbnail strip without scrolling the page', async () => {
@@ -353,4 +354,19 @@ test('row preload responds to scrolling and filtering, retains its buffer and re
   loader.destroy();
   assert.equal(raf.size, 0);
   assert.ok(frames.every((frame) => !frame.image.url));
+});
+
+
+test('disabling motion cancels a running gallery animation and centers thumbnails instantly', () => {
+  const page = galleryPage();
+  page.next.dispatchEvent(new Event('click'));
+  const animation = page.animations.at(-1);
+  page.reduced.matches = true;
+  page.reduced.dispatchEvent(new Event('change'));
+  assert.equal(animation.cancelled, true);
+  assert.equal(page.scrolls.at(-1).behavior, 'instant');
+  const count = page.animations.length;
+  page.next.dispatchEvent(new Event('click'));
+  assert.equal(page.animations.length, count);
+  page.loader.destroy();
 });

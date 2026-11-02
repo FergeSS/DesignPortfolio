@@ -34,7 +34,7 @@ ${[['Почта', contacts.email ? `mailto:${contacts.email}` : 'mailto:sasha-uh
 function layout(config, { title, content, base = './', page = 'home' }) {
   const asset = (name) => `${base}${name}?v=${encodeURIComponent(config.version || '1')}`;
   return `<!doctype html>
-<html lang="ru"><head>
+<html lang="ru" data-animations="${config.animationsEnabled === false ? 'off' : 'on'}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="portfolio-version" content="${e(config.version || '')}"><meta name="portfolio-source" content="${e(config.publicUrl || '')}">
 <title>${e(title)}</title><meta name="description" content="${e(config.description)}">

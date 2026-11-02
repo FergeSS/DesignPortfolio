@@ -1,4 +1,4 @@
-const [media, motion, ui] = await Promise.all(['media.js', 'motion.js', 'portfolio-ui.js'].map((file) => {
+const [media, motion, ui, animationSettings] = await Promise.all(['media.js', 'motion.js', 'portfolio-ui.js', 'animation-settings.js'].map((file) => {
   const url = new URL(file, import.meta.url);
   url.search = new URL(import.meta.url).search;
   return import(url.href);
@@ -16,7 +16,8 @@ const projectKey = (url) => /\/projects\/([^/]+)\/?$/.exec(url.pathname)?.[1];
 const transitionOptions = { duration: 620, easing: 'cubic-bezier(.22,1,.36,1)', fill: 'both' };
 
 export function initNavigation({ document, window, fetchImpl = window.fetch.bind(window) }) {
-  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const settings = animationSettings.createAnimationSettings({ document, window });
+  const reduced = settings.preference;
   const version = document.querySelector('meta[name="portfolio-version"]')?.content;
   const entries = new Map();
   let serial = 0;
@@ -35,10 +36,10 @@ export function initNavigation({ document, window, fetchImpl = window.fetch.bind
       const href = link.getAttribute('href');
       if (!href.startsWith('#')) link.href = new URL(href, window.location.href).href;
     }
-    const loader = media.mountMedia({ document, window, publicUrl: document.querySelector('meta[name="portfolio-source"]')?.content });
+    const loader = media.mountMedia({ document, window, reduced, publicUrl: document.querySelector('meta[name="portfolio-source"]')?.content });
     const disposeUI = ui.initPortfolioUI({ document, window });
-    const disposeMotion = motion.initMotion({ document, window });
-    const disposeCards = motion.initCardInteractions({ document, window });
+    const disposeMotion = motion.initMotion({ document, window, reduced });
+    const disposeCards = motion.initCardInteractions({ document, window, reduced });
     disposePage = () => { disposeCards(); disposeMotion(); disposeUI(); loader.destroy(); };
   }
 
@@ -231,7 +232,7 @@ export function initNavigation({ document, window, fetchImpl = window.fetch.bind
   reduced.addEventListener('change', motionPreference);
   mountPage();
   return () => {
-    pending?.abort(); stopTransition(); disposePage();
+    pending?.abort(); stopTransition(); disposePage(); settings.destroy();
     document.removeEventListener('click', click); window.removeEventListener('popstate', pop);
     window.removeEventListener('pagehide', hide); reduced.removeEventListener('change', motionPreference);
     window.history.scrollRestoration = previousRestoration;

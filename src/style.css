@@ -219,3 +219,11 @@ dialog[open] { animation: viewer-enter .3s var(--ease); }
   .card-surface, .card:active .card-surface, .card.is-opening .card-surface { transform: none; scale: 1; }
   .card-surface::after { display: none; }
 }
+
+/* One site-wide switch covers CSS effects as well as the shared JS preference. */
+html[data-animations='off'], [data-animations='off'] *, [data-animations='off'] *::before, [data-animations='off'] *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+[data-animations='off'] .hero-letter { will-change: auto; }
+[data-animations='off'] [data-reveal] > .card-surface { opacity: 1; transform: none; filter: none; }
+[data-animations='off'] .card-surface, [data-animations='off'] .card:active .card-surface, [data-animations='off'] .card.is-opening .card-surface { transform: none; scale: 1; }
+[data-animations='off'] .card:hover .card-caption .icon, [data-animations='off'] .gallery-step:hover { transform: none; }
+[data-animations='off'] .card-surface::after { display: none; }
