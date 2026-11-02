@@ -80,10 +80,32 @@ function updateCardGlow(frame, image) {
   } catch { /* A decorative effect must never interrupt loading the cover. */ }
 }
 
+// Use card bounds, not animated image bounds: preload three complete rows
+// beyond each edge of the viewport, whatever the height of those rows.
+export function mosaicPreloadFrames(covers, viewportHeight, bufferRows = 3) {
+  const rows = [];
+  const arranged = covers.filter((cover) => !cover.hidden && cover.bottom > cover.top).sort((a, b) => a.top - b.top);
+  for (const cover of arranged) {
+    let row = rows.at(-1);
+    if (!row || Math.abs(row.top - cover.top) > 1) {
+      row = { top: cover.top, bottom: cover.bottom, frames: [] };
+      rows.push(row);
+    }
+    row.bottom = Math.max(row.bottom, cover.bottom);
+    row.frames.push(cover.frame);
+  }
+  let first = rows.findIndex((row) => row.bottom > 0);
+  let after = rows.findIndex((row) => row.top >= viewportHeight);
+  if (first < 0) first = rows.length;
+  if (after < 0) after = rows.length;
+  return rows.slice(Math.max(0, first - bufferRows), Math.min(rows.length, Math.max(first, after) + bufferRows)).flatMap((row) => row.frames);
+}
+
 export function mountMedia({ document, window, publicUrl, resolveMedia = createMediaResolver({ publicUrl }) }) {
   const frames = [...document.querySelectorAll('.remote-media')];
   const states = new WeakMap();
   const visible = new Set();
+  let preloadPaused = false;
   // Preview dimensions must never replace the original resolution used by the mosaic.
   const ratioKey = (frame) => `portfolio-dimensions:${frame.dataset.diskMode || 'full'}:${frame.dataset.diskPath}:${frame.dataset.diskRevision}`;
   for (const frame of frames) {
@@ -97,6 +119,7 @@ export function mountMedia({ document, window, publicUrl, resolveMedia = createM
   async function show(frame, fresh = false) {
     const state = states.get(frame);
     window.clearTimeout(state.unloadTimer);
+    state.unloadTimer = undefined;
     if (!fresh && (state.loaded || state.loading)) return;
     state.controller?.abort();
     state.controller = new AbortController();
@@ -144,6 +167,7 @@ export function mountMedia({ document, window, publicUrl, resolveMedia = createM
   function release(frame) {
     const state = states.get(frame);
     window.clearTimeout(state.unloadTimer);
+    state.unloadTimer = undefined;
     state.generation++;
     state.controller?.abort();
     state.loading = false;
@@ -155,7 +179,10 @@ export function mountMedia({ document, window, publicUrl, resolveMedia = createM
     frame.dataset.state = 'idle';
   }
 
-  // Start originals about one screen ahead, in either scroll direction.
+  const grid = document.querySelector('.grid');
+  const gridCovers = grid ? frames.map((frame) => ({ frame, card: frame.closest('.card') })).filter(({ card }) => card && grid.contains(card)) : [];
+  const gridFrames = new Set(gridCovers.map(({ frame }) => frame));
+  // Other media (project galleries and thumbnails) use the nearby-viewport buffer.
   const preloadDistance = Math.round(Math.max(720, Math.min(1200, window.innerHeight || 800)));
   const observer = window.IntersectionObserver ? new window.IntersectionObserver((entries) => {
     for (const entry of entries) {
@@ -174,8 +201,50 @@ export function mountMedia({ document, window, publicUrl, resolveMedia = createM
     frame.querySelector('.media-retry')?.addEventListener('click', () => { void show(frame, true); });
     const link = frame.querySelector('.media-source');
     if (link) link.href = publicUrl;
+    if (gridFrames.has(frame)) continue;
     if (observer) observer.observe(frame);
     else { visible.add(frame); void show(frame); }
+  }
+
+  let stopGridPreload = () => {};
+  let refreshGridPreload = () => {};
+  if (gridCovers.length) {
+    let request;
+    const update = () => {
+      request = undefined;
+      if (preloadPaused) return;
+      const wanted = new Set(mosaicPreloadFrames(gridCovers.map(({ frame, card }) => {
+        const { top, bottom } = card.getBoundingClientRect();
+        return { frame, top, bottom, hidden: card.hidden };
+      }), window.innerHeight));
+      for (const { frame } of gridCovers) {
+        const state = states.get(frame);
+        if (wanted.has(frame)) {
+          const entering = !visible.has(frame);
+          visible.add(frame);
+          window.clearTimeout(state.unloadTimer);
+          state.unloadTimer = undefined;
+          if (entering) void show(frame);
+        } else {
+          visible.delete(frame);
+          if ((state.loaded || state.loading) && state.unloadTimer === undefined) {
+            state.unloadTimer = window.setTimeout(() => release(frame), 1500);
+          }
+        }
+      }
+    };
+    const schedule = () => { if (request === undefined) request = window.requestAnimationFrame(update); };
+    window.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('resize', schedule);
+    grid.addEventListener('mosaiclayout', schedule);
+    refreshGridPreload = schedule;
+    schedule();
+    stopGridPreload = () => {
+      window.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
+      grid.removeEventListener('mosaiclayout', schedule);
+      if (request !== undefined) window.cancelAnimationFrame(request);
+    };
   }
 
   const viewer = document.querySelector('#lightbox');
@@ -301,9 +370,9 @@ export function mountMedia({ document, window, publicUrl, resolveMedia = createM
     });
   }
 
-  const hide = () => { for (const frame of frames) release(frame); if (viewer?.open) viewer.close(); resolveMedia.clear(); };
-  const restore = () => { for (const frame of visible) void show(frame); };
+  const hide = () => { preloadPaused = true; for (const frame of frames) release(frame); if (viewer?.open) viewer.close(); resolveMedia.clear(); };
+  const restore = () => { preloadPaused = false; for (const frame of visible) void show(frame); refreshGridPreload(); };
   window.addEventListener('pagehide', hide);
   window.addEventListener('pageshow', restore);
-  return { show, release, destroy() { selectionAnimation?.cancel(); hide(); observer?.disconnect(); document.removeEventListener('keydown', onGalleryKey); window.removeEventListener('resize', onGalleryResize); window.removeEventListener('pagehide', hide); window.removeEventListener('pageshow', restore); } };
+  return { show, release, destroy() { stopGridPreload(); selectionAnimation?.cancel(); hide(); observer?.disconnect(); document.removeEventListener('keydown', onGalleryKey); window.removeEventListener('resize', onGalleryResize); window.removeEventListener('pagehide', hide); window.removeEventListener('pageshow', restore); } };
 }

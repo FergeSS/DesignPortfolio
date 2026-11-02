@@ -141,6 +141,7 @@ export function initPortfolioUI({ document, window }) {
       // Keep keyboard navigation in the same order as the visible mosaic.
       if (arranged.some((card, index) => card !== current[index])) grid.append(...arranged);
       request = undefined;
+      grid.dispatchEvent(new window.CustomEvent('mosaiclayout'));
     };
     const schedule = () => { if (!request) request = window.requestAnimationFrame(layout); };
     const resize = new window.ResizeObserver(schedule);

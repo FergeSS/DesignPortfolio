@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createMediaResolver, mountMedia } from '../src/media.js';
+import { createMediaResolver, mountMedia, mosaicPreloadFrames } from '../src/media.js';
 
 test('media URLs: Unicode paths, fresh preview vs original, cache expiry and no image-body downloads', async () => {
   const calls = [];
@@ -270,4 +270,87 @@ test('preview dimensions cannot overwrite the original resolution cached for mos
   const restoredPreview = fakePage(resolver, null, { mode: 'preview', storage });
   assert.equal(restoredPreview.dimensions.get('--media-ratio'), '225 / 300');
   for (const page of [full, preview, restored, restoredPreview]) page.loader.destroy();
+});
+
+
+test('mosaic preload includes three complete invisible rows across varying poster heights', () => {
+  const covers = [];
+  let top = 0;
+  const heights = [350, 850, 1200, 400, 950, 300, 700, 500, 1000];
+  heights.forEach((height, row) => {
+    for (let column = 0; column < (row % 3) + 1; column++) covers.push({ frame: `${row}:${column}`, top, bottom: top + height });
+    top += height + 24;
+  });
+  const below = mosaicPreloadFrames(covers, 700);
+  assert.deepEqual(below, covers.filter((cover) => Number(cover.frame.split(':')[0]) <= 4).map((cover) => cover.frame), 'two visible rows plus the next three rows load, including a tall poster beyond the old pixel buffer');
+  const shifted = covers.map((cover) => ({ ...cover, top: cover.top - 2800, bottom: cover.bottom - 2800 }));
+  const visibleRows = [...new Set(shifted.filter((cover) => cover.bottom > 0 && cover.top < 700).map((cover) => Number(cover.frame.split(':')[0])))];
+  const expected = covers.filter((cover) => {
+    const row = Number(cover.frame.split(':')[0]);
+    return row >= visibleRows[0] - 3 && row <= visibleRows.at(-1) + 3;
+  }).map((cover) => cover.frame);
+  assert.deepEqual(mosaicPreloadFrames(shifted, 700), expected, 'the reverse scroll buffer also covers three complete rows');
+  const beforeGrid = covers.map((cover) => ({ ...cover, top: cover.top + 1500, bottom: cover.bottom + 1500 }));
+  assert.deepEqual(mosaicPreloadFrames(beforeGrid, 700), covers.filter((cover) => Number(cover.frame.split(':')[0]) < 3).map((cover) => cover.frame));
+  assert.deepEqual(mosaicPreloadFrames(covers.map((cover) => ({ ...cover, hidden: true })), 700), []);
+});
+
+test('row preload responds to scrolling and filtering, retains its buffer and releases distant originals', async () => {
+  const window = new EventTarget();
+  const raf = new Map(), timers = new Map(), calls = [];
+  let serial = 0, scroll = 0;
+  window.innerHeight = 700;
+  window.requestAnimationFrame = (callback) => { raf.set(++serial, callback); return serial; };
+  window.cancelAnimationFrame = (id) => raf.delete(id);
+  window.setTimeout = (callback) => { timers.set(++serial, callback); return serial; };
+  window.clearTimeout = (id) => timers.delete(id);
+  const observed = [];
+  window.IntersectionObserver = class { observe(frame) { observed.push(frame); } disconnect() {} };
+  class Image extends EventTarget {
+    naturalWidth = 1000; naturalHeight = 1000;
+    set src(value) { this.url = value; queueMicrotask(() => this.dispatchEvent(new Event('load'))); }
+    removeAttribute() { this.url = undefined; }
+  }
+  const grid = new EventTarget();
+  const frames = Array.from({ length: 12 }, (_, index) => {
+    const card = { hidden: false, querySelector: () => null, getBoundingClientRect: () => ({ top: index * 924 - scroll, bottom: index * 924 + 900 - scroll }) };
+    const image = new Image(), status = {};
+    return { dataset: { diskPath: `/${index}.png`, diskMode: 'full' }, style: { setProperty() {} }, card, image,
+      closest: () => card,
+      querySelector: (selector) => selector === 'img' ? image : selector === '.media-status' ? status : null,
+    };
+  });
+  grid.contains = (card) => frames.some((frame) => frame.card === card);
+  const document = Object.assign(new EventTarget(), { querySelectorAll: (selector) => selector === '.remote-media' ? frames : [], querySelector: (selector) => selector === '.grid' ? grid : null });
+  const resolver = async (path) => { calls.push(path); return `https://media.example${path}`; };
+  resolver.clear = () => {};
+  const tick = async () => {
+    const pending = [...raf.values()]; raf.clear(); pending.forEach((callback) => callback());
+    await new Promise((resolve) => setImmediate(resolve));
+  };
+  const loader = mountMedia({ document, window, resolveMedia: resolver });
+  await tick();
+  assert.deepEqual(observed, [], 'the pixel observer cannot unload row-buffered originals');
+  assert.deepEqual(calls, ['/0.png', '/1.png', '/2.png', '/3.png']);
+  scroll = 5 * 924;
+  window.dispatchEvent(new Event('scroll'));
+  await tick();
+  for (const callback of [...timers.values()]) callback();
+  assert.equal(frames[0].image.url, undefined);
+  for (let index = 2; index <= 8; index++) assert.ok(frames[index].image.url, 'visible row and three rows on either side stay loaded');
+  assert.equal(frames[9].image.url, undefined);
+  const count = calls.length;
+  window.dispatchEvent(new Event('scroll'));
+  await tick();
+  assert.equal(calls.length, count, 'scrolling inside the same buffer does not restart downloads');
+  frames[6].card.hidden = true;
+  grid.dispatchEvent(new Event('mosaiclayout'));
+  await tick();
+  assert.ok(frames[9].image.url, 'a filtered row is replaced by another row in the preload buffer');
+  for (const callback of [...timers.values()]) callback();
+  assert.equal(frames[6].image.url, undefined, 'filtered originals are released');
+  window.dispatchEvent(new Event('scroll'));
+  loader.destroy();
+  assert.equal(raf.size, 0);
+  assert.ok(frames.every((frame) => !frame.image.url));
 });
