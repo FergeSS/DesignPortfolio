@@ -116,6 +116,21 @@ test('custom gallery order reaches static pages, keeps the cover independent and
   assert.deepEqual(parseInfo(`Порядок изображений: ${JSON.stringify(unicode)}`, 'Работа').imageOrder, unicode);
 });
 
+test('WebP migration hides retained originals while preserving covers and gallery order', async (t) => {
+  const root = await setup(t), f = fixture();
+  f.files.set('/Кофейня/info.txt', Buffer.from(`Порядок изображений: ["10.png","02.png","cover.png"]\n${text}`));
+  for (const file of [...f.dirs['/Кофейня']].filter((file) => /\.png$/.test(file.name))) {
+    f.dirs['/Кофейня'].push({ ...file, name: file.name.replace('.png', '.webp'), path: file.path.replace('.png', '.webp') });
+  }
+  const data = await syncPortfolio({ root, disk: f.disk });
+  assert.equal(data.projects[0].cover.name, 'cover.webp');
+  assert.deepEqual(data.projects[0].images.map((image) => image.name), ['10.webp', '02.webp', 'cover.webp']);
+  await buildPortfolio(root);
+  const html = await readFile(resolve(root, 'dist/projects/ezh/index.html'), 'utf8');
+  assert.deepEqual([...html.matchAll(/data-gallery-index="\d+" data-name="([^"]+)"/g)].map((match) => match[1]), ['10.webp', '02.webp', 'cover.webp']);
+  assert.ok(!html.includes('data-disk-path="/Кофейня/cover.png"'));
+});
+
 test('bad UTF-8, API failure, duplicate slugs and old media snapshots preserve the previous site', async (t) => {
   const root = await setup(t);
   const first = fixture();

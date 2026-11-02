@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile, rename } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { YandexDisk } from './yandex.mjs';
-import { decodeInfo, parseInfo, defaultSlug, imagePattern, natural, sortImages } from './content.mjs';
+import { preferWebpImages, webpImageOrder, decodeInfo, parseInfo, defaultSlug, natural, sortImages } from './content.mjs';
 
 export async function syncPortfolio({ root = process.cwd(), disk, now = new Date() } = {}) {
   const config = JSON.parse(await readFile(resolve(root, 'portfolio.config.json'), 'utf8'));
@@ -30,7 +30,8 @@ export async function syncPortfolio({ root = process.cwd(), disk, now = new Date
     slugs.add(slug);
     if (!info) warnings.push(`${folder.name}: нет info.txt, используется название папки.`);
     const images = [];
-    const imageFiles = files.filter((item) => imagePattern.test(item.name)).sort((a, b) => natural(a.name, b.name));
+    const imageFiles = preferWebpImages(files).sort((a, b) => natural(a.name, b.name));
+    metadata.imageOrder = webpImageOrder(imageFiles, metadata.imageOrder);
     for (const file of imageFiles) images.push({
       name: file.name,
       path: file.path,

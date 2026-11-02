@@ -5,6 +5,18 @@ export const imagePattern = /\.(jpe?g|png|webp|gif|avif)$/i;
 export const natural = (a, b) => a.localeCompare(b, 'ru', { numeric: true });
 export const hash = (value) => createHash('sha256').update(value).digest('hex');
 
+// During migration the original remains available to already-open pages.
+export function preferWebpImages(files) {
+  const images = files.filter((file) => imagePattern.test(file.name) && !file.name.startsWith('.'));
+  const names = new Set(images.map((file) => file.name.toLowerCase()));
+  return images.filter((file) => /\.webp$/i.test(file.name) || !names.has(file.name.replace(/\.[^.]+$/, '.webp').toLowerCase()));
+}
+
+export function webpImageOrder(images, order) {
+  const names = new Map(images.map((image) => [image.name.toLowerCase(), image.name]));
+  return [...new Set(order.map((name) => names.get(name.toLowerCase()) || names.get(name.replace(/\.[^.]+$/, '.webp').toLowerCase()) || name))];
+}
+
 export function validateImageOrder(value) {
   if (!Array.isArray(value) || value.length > 2000 || value.some((name) => typeof name !== 'string' || !imagePattern.test(name) || name.length > 255 || name.startsWith('.') || /[\\/\u0000-\u001f\u007f]/.test(name)) || new Set(value).size !== value.length) throw new Error('Порядок изображений — список уникальных имён файлов изображений.');
   return value;

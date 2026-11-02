@@ -1,8 +1,9 @@
 import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { toWebp, webpName, commitWebpImages } from './webp.mjs';
 import { YandexDisk } from '../scripts/yandex.mjs';
-import { decodeInfo, parseInfo, defaultSlug, imagePattern, natural, hash, validateImageOrder, galleryImages } from '../scripts/content.mjs';
+import { decodeInfo, parseInfo, defaultSlug, imagePattern, preferWebpImages, webpImageOrder, natural, hash, validateImageOrder, galleryImages } from '../scripts/content.mjs';
 import { AdminError, WritableDisk, component, child, diskRoot } from './disk.mjs';
 
 const revision = (files) => hash(JSON.stringify(files.map((f) => [f.name, f.md5 || f.revision || f.modified || '', f.size || 0]).sort((a, b) => natural(a[0], b[0]))));
@@ -106,7 +107,8 @@ export class AdminService {
     }
     if (!problem && infos.length > 1) problem = 'Найдено несколько описаний. При сохранении останется один info.txt, предыдущие копии будут сохранены локально.';
     const slug = metadata.slug || defaultSlug(child(this.config.sourcePath || '/', folder));
-    const images = files.filter((item) => imagePattern.test(item.name) && !item.name.startsWith('.')).sort((a, b) => natural(a.name, b.name)).map((item) => ({ name: item.name, size: item.size || 0, revision: String(item.md5 || item.modified || ''), thumbnail: '/api/thumbnail?' + new URLSearchParams({ folder, name: item.name, revision: String(item.md5 || item.modified || '') }) }));
+    const images = preferWebpImages(files).sort((a, b) => natural(a.name, b.name)).map((item) => ({ name: item.name, size: item.size || 0, revision: String(item.md5 || item.modified || ''), thumbnail: '/api/thumbnail?' + new URLSearchParams({ folder, name: item.name, revision: String(item.md5 || item.modified || '') }) }));
+    metadata.imageOrder = webpImageOrder(images, metadata.imageOrder);
     const cover = images.find((item) => /^cover\./i.test(item.name))?.name || images[0]?.name || '';
     return { ...metadata, slug, folder, images: galleryImages(images, metadata.imageOrder, cover), cover, problem, metadataUnavailable, version: metadataUnavailable ? null : revision(files), hasInfo: Boolean(infos.length) };
   }
@@ -176,12 +178,29 @@ export class AdminService {
   }
   async upload({ folder, name, bytes, version, replace = false }) {
     const project = await this.current(folder, version);
-    validateImage(name, bytes);
+    component(name);
+    if (!imagePattern.test(name)) throw new AdminError('Поддерживаются PNG, JPG, WebP, GIF и AVIF.');
+    if (!replace) validateImage(name, bytes);
     if (!replace && project.images.some((item) => item.name.toLowerCase() === name.toLowerCase())) throw new AdminError('Файл с таким именем уже есть. Используй кнопку «Заменить».', 409);
     if (replace && !project.images.some((item) => item.name === name)) throw new AdminError('Файл для замены не найден.', 404);
-    await this.writer.upload(child(this.settings.root, folder, name), bytes, replace);
-    return this.project(folder);
+    if (project.problem) throw new AdminError('Сначала исправь описание работы перед загрузкой изображений.');
+    let target = webpName(name);
+    if (project.images.some((item) => item.name.toLowerCase() === target.toLowerCase() && item.name !== name)) throw new AdminError('Файл с таким именем WebP уже есть. Используй кнопку «Заменить».', 409);
+    const stem = name.replace(/\.[^.]+$/, '');
+    if (!replace && project.images.some((item) => item.name.replace(/\.[^.]+$/, '').toLowerCase() === stem.toLowerCase())) {
+      let suffix = 2;
+      do { target = component(`${stem}-${suffix++}.webp`); } while (project.images.some((item) => item.name.replace(/\.[^.]+$/, '').toLowerCase() === target.replace(/\.webp$/i, '').toLowerCase()));
+    }
+    if ((replace && project.cover === name) || !project.images.length) target = 'cover.webp';
+    const converted = await toWebp(bytes);
+    const order = project.images.map((image) => image.name === name ? target : image.name);
+    if (!order.includes(target)) order.push(target);
+    await commitWebpImages({ disk: this.writer, directory: child(this.settings.root, folder), project,
+      changes: [{ name, target, bytes: converted }], metadata: Buffer.from(serializeMetadata({ ...project, imageOrder: order }, folder)),
+    });
+    return { ...await this.project(folder), imageRenames: { [name]: target } };
   }
+
   async cover({ folder, name, version }) {
     const project = await this.current(folder, version);
     component(name);

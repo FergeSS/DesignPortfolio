@@ -2,7 +2,9 @@
   "name": "design-portfolio",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "admin": "node scripts/admin.mjs",
     "sync": "node scripts/sync.mjs",
@@ -11,5 +13,8 @@
     "dev": "node scripts/serve.mjs",
     "preview": "node scripts/serve.mjs --static",
     "test": "node --test"
+  },
+  "dependencies": {
+    "sharp": "^0.35.5"
   }
 }

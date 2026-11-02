@@ -12,7 +12,7 @@ import { Publication } from '../admin/publication.mjs';
 
 const ROOT = 'disk:/РаботыСайт';
 const config = { publicUrl: 'https://disk.yandex.ru/d/test-share', sourcePath: '/', ignoredFolders: ['Черновики'] };
-const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64');
+const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4z8DQAAAEgQGADgLFJAAAAABJRU5ErkJggg==', 'base64');
 const meta = (title = 'Работа') => ({ title, category: 'Постеры', year: '2026', order: 2, slug: '', description: 'Первый абзац.\n\nВторой.', published: true });
 export class MemoryDisk {
   constructor() { this.dirs = new Set([ROOT, ROOT + '/Постер']); this.files = new Map([[ROOT + '/Постер/info.txt', Buffer.from(serializeMetadata(meta(), 'Постер'))], [ROOT + '/Постер/cover.png', png], [ROOT + '/Постер/02.png', png]]); this.trashed = []; this.failUpload = false; this.failMove = false; }
@@ -155,9 +155,9 @@ test('gallery order survives saves, old clients and cover changes; a failed cove
   assert.match(project.images[0].name, /^previous-cover-/); assert.equal(project.images[1].name, 'cover.png');
   assert.equal(project.cover, 'cover.png'); assert.deepEqual(project.imageOrder, project.images.map((image) => image.name));
   const uploaded = await app.service.upload({ folder: 'Постер', version: project.version, name: 'Ава.png', bytes: png });
-  assert.equal(uploaded.images.at(-1).name, 'Ава.png');
+  assert.equal(uploaded.images.at(-1).name, 'Ава.webp');
   project = await app.service.save({ folder: 'Постер', version: uploaded.version, metadata: { ...uploaded, imageOrder: uploaded.images.map((image) => image.name).reverse() } });
-  assert.equal((await app.service.project('Постер')).images[0].name, 'Ава.png');
+  assert.equal((await app.service.project('Постер')).images[0].name, 'Ава.webp');
 });
 
 test('uploads require a supported image signature and explicit replacement; creation failure preserves existing projects', async (t) => {

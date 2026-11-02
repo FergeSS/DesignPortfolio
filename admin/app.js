@@ -147,7 +147,7 @@ function renderImages() {
     const size = document.createElement('p'); size.className = 'image-size'; size.textContent = bytesLabel(image.size);
     const actions = document.createElement('div'); actions.className = 'image-actions';
     if (!isCover) actions.append(action('Сделать обложкой', () => perform(async () => { await saveCurrent(); updateProject(await api('/api/cover', { method: 'POST', data: { folder: state.current.folder, name: image.name, version: state.current.version } })); toast('Обложка изменена.'); })));
-    actions.append(action('Заменить', () => { state.replaceName = image.name; $('#replace-input').accept = '.' + image.name.split('.').at(-1); $('#replace-input').click(); }));
+    actions.append(action('Заменить', () => { state.replaceName = image.name; $('#replace-input').accept = '.png,.jpg,.jpeg,.webp,.gif,.avif'; $('#replace-input').click(); }));
     actions.append(action('В корзину', () => { if (!confirm(`Переместить «${image.name}» в корзину Яндекс Диска?`)) return; perform(async () => { await saveCurrent(); updateProject(await api('/api/file', { method: 'DELETE', data: { folder: state.current.folder, name: image.name, version: state.current.version } })); toast('Изображение перемещено в корзину.'); }); }, true));
     details.append(order, name, size, actions); card.append(preview, details); list.append(card);
   }
